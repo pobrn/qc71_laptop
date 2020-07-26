@@ -65,7 +65,7 @@ static const u16 qc71_fan_addrs[] = {
 
 
 /* lightbar */
-enum qc71_lightbar_colors {
+enum qc71_lightbar_color {
 	QC71_LIGHTBAR_RED   = 0,
 	QC71_LIGHTBAR_GREEN = 1,
 	QC71_LIGHTBAR_BLUE  = 2,
@@ -377,10 +377,15 @@ qc71_lightbar_set_color_level(u8 color, u8 level)
 static int
 qc71_lightbar_get_color_level(u8 color)
 {
+	int err;
 	if (color >= ARRAY_SIZE(lightbar_color_addrs))
 		return -EINVAL;
 
-	return lightbar_pwm_to_level[color][ec_read_byte(lightbar_color_addrs[color])];
+	err = ec_read_byte(lightbar_color_addrs[color]);
+	if (err < 0)
+		return err;
+
+	return lightbar_pwm_to_level[color][err];
 }
 
 static int
@@ -795,13 +800,6 @@ qc71_hwmon_chip_info = {
 };
 
 
-
-
-
-
-
-
-
 static ssize_t lightbar_s3_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -836,12 +834,14 @@ static ssize_t lightbar_color_show(struct device *dev,
 	int color = 0, i;
 
 	for (i = 0; i < ARRAY_SIZE(lightbar_colors); i++) {
-		int comp = qc71_lightbar_get_color_level(lightbar_colors[i]);
+		int level = qc71_lightbar_get_color_level(lightbar_colors[i]);
+		if (level < 0)
+			return level;
 
-		color *= 10;
+		level *= 10;
 
-		if (0 <= comp && comp <= 9)
-			color += comp;
+		if (0 <= level && level <= 9)
+			color += level;
 	}
 
 	return sprintf(buf, "%03d\n", color);
