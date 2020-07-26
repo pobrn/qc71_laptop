@@ -223,10 +223,10 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 		0,
 		0,
 	};
-	
+
 	/* the returned ACPI_TYPE_BUFFER is 40 bytes long for some reason ... */
 	u8 outbuf_buf[sizeof(union acpi_object) + 40];
-	
+
 
 	struct acpi_buffer input = { (acpi_size)sizeof(buf), buf };
 	struct acpi_buffer output = { (acpi_size) sizeof(outbuf_buf), outbuf_buf };
@@ -327,7 +327,7 @@ qc71_fan_query_abnorm(void)
 	int err = ec_read_byte(AP_OEM_BYTE_ADDR);
 	if (err < 0)
 		return err;
-		
+
 	return !!(err & AP_OEM_BYTE_FAN_ABNORM);
 }
 
@@ -403,14 +403,14 @@ static int
 qc71_lightbar_set_color(int color)
 {
 	int err = 0, i;
-	
+
 	if (!(0 <= color && color <= 999))
 		return -EINVAL;
 
 	for (i = ARRAY_SIZE(lightbar_colors)-1; i >= 0 && err == 0; i--, color /= 10) {
 		err = qc71_lightbar_set_color_level(lightbar_colors[i], color % 10);
 	}
-	
+
 	return err;
 }
 
@@ -424,7 +424,7 @@ static ssize_t fan_boost_show(struct device *dev,
 	int status = ec_read_byte(FAN_CTRL_ADDR);
 	if (status < 0)
 		return status;
-		
+
 	return sprintf(buf, "%d\n", (int) !!(status & FAN_CTRL_ADDR));
 }
 
@@ -442,7 +442,7 @@ static ssize_t fan_boost_store(struct device *dev,
 		return status;
 
 	status = SET_BIT(status, FAN_CTRL_FAN_BOOST, value);
-	
+
 	status = ec_write_byte(FAN_CTRL_ADDR, status);
 
 	if (status < 0)
@@ -457,7 +457,7 @@ static ssize_t fan_reduced_duty_cycle_show(struct device *dev,
 	int status = ec_read_byte(BIOS_CTRL_3_ADDR);
 	if (status < 0)
 		return status;
-		
+
 	return sprintf(buf, "%d\n", (int) !!(status & BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE));
 }
 
@@ -475,7 +475,7 @@ static ssize_t fan_reduced_duty_cycle_store(struct device *dev,
 		return status;
 
 	status = SET_BIT(status, BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE, value);
-	
+
 	status = ec_write_byte(BIOS_CTRL_3_ADDR, status);
 
 	if (status < 0)
@@ -490,7 +490,7 @@ static ssize_t fan_always_on_show(struct device *dev,
 	int status = ec_read_byte(BIOS_CTRL_3_ADDR);
 	if (status < 0)
 		return status;
-		
+
 	return sprintf(buf, "%d\n", (int) !!(status & BIOS_CTRL_3_FAN_ALWAYS_ON));
 }
 
@@ -508,7 +508,7 @@ static ssize_t fan_always_on_store(struct device *dev,
 		return status;
 
 	status = SET_BIT(status, BIOS_CTRL_3_FAN_ALWAYS_ON, value);
-	
+
 	status = ec_write_byte(BIOS_CTRL_3_ADDR, status);
 
 	if (status < 0)
@@ -570,7 +570,7 @@ static ssize_t charge_control_end_threshold_show(struct device *dev,
 		return status;
 
 	status &= BATT_CHARGE_CTRL_VALUE_MASK;
-	
+
 	if (status == 0)
 		status = 100;
 
@@ -591,9 +591,9 @@ static ssize_t charge_control_end_threshold_store(struct device *dev,
 
 	if (value == 100)
 		value = 0;
-	
+
 	status = (status & ~BATT_CHARGE_CTRL_VALUE_MASK) | value;
-	
+
 	status = ec_write_byte(BATT_CHARGE_CTRL_ADDR, status);
 
 	if (status < 0)
@@ -766,7 +766,7 @@ qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
 			err = qc71_fan_query_abnorm();
 			if (err < 0)
 				return err;
-				
+
 			*value = err;
 			break;
 		default:
@@ -897,7 +897,7 @@ qc71_lightbar_led_get_brightness(struct led_classdev *led_cdev)
 	int err = qc71_lightbar_get_status();
 	if (err)
 		return 0;
-		
+
 	return !(err & LIGHTBAR_CTRL_S0_OFF);
 }
 
@@ -938,12 +938,12 @@ qc71_wmi_event_d2_handler(union acpi_object *obj)
 		return;
 
 	switch (obj->integer.value) {
-	
+
 	/* caps lock */
 	case 1:
 		pr_info("caps lock\n");
 		break;
-	
+
 	/* increase screen brightness */
 	case 20:
 		pr_info("increase screen brightness\n");
@@ -953,72 +953,72 @@ qc71_wmi_event_d2_handler(union acpi_object *obj)
 	case 21:
 		pr_info("decrease screen brightness\n");
 		break;
-	
+
 	/* mute/unmute */
 	case 53:
 		pr_info("change mute state\n");
 		break;
-	
+
 	/* decrease volume */
 	case 54:
 		pr_info("decrease volume\n");
 		break;
-	
+
 	/* increase volume */
 	case 55:
 		pr_info("increase volume\n");
 		break;
-	
+
 	/* enable super key (win key) lock */
 	case 64:
 		pr_info("enable super key lock\n");
 		break;
-	
+
 	/* decrease volume */
 	case 65:
 		pr_info("disable super key lock\n");
 		break;
-	
+
 	/* enable/disable airplane mode */
 	case 164:
 		pr_info("airplane mode\n");
 		break;
-	
+
 	/* super key (win key) state changed */
 	case 165:
 		pr_info("super key lock state changed\n");
 		break;
-	
+
 	/* fan boost state changed */
 	case 167:
 		pr_info("fan boost state changed\n");
 		break;
-	
+
 	/* charger unplugged/plugged in */
 	case 171:
 		pr_info("AC plugged/unplugged\n");
 		break;
-	
+
 	/* perf mode button pressed */
 	case 176:
 		pr_info("change perf mode\n");
 		break;
-	
+
 	/* increase keyboard backlight */
 	case 177:
 		pr_info("keyboard backlight decrease\n");
 		break;
-	
+
 	/* decrease keyboard backlight */
 	case 178:
 		pr_info("keyboard backlight increase\n");
 		break;
-	
+
 	/* keyboard backlight brightness changed */
 	case 240:
 		pr_info("keyboard backlight changed\n");
 		break;
-		
+
 	default:
 		pr_info("unknown code: %u\n", (unsigned) obj->integer.value);
 		break;
@@ -1057,15 +1057,15 @@ qc71_wmi_event_handler(u32 value, void *context)
 				pr_info("buf[%u] = 0x%02X\n", (unsigned) i, (unsigned) obj->buffer.pointer[i]);
 		}
 	}
-	
-	
+
+
 	switch (value) {
 		case 0xD2: qc71_wmi_event_d2_handler(obj); break;
 		case 0xD1: break;
 		case 0xD0: break;
 		default: break;
 	}
-	
+
 
 	kfree(obj);
 }
@@ -1108,22 +1108,22 @@ oem_string_walker(const struct dmi_header *dm, void *ptr)
 	int i, count;
 	const u8 *s;
 	struct oem_string_walker_data *data = ptr;
-	
+
 	if (dm->type != 11 || dm->length < 5 || data->value)
 		return;
-	
+
 	count = *(u8 *)(dm + 1);
-	
+
 	if (data->index >= count)
 		return;
-	
+
 	i = 0;
 	s = ((u8*)dm) + dm->length;
-	
+
 	while (i++ < data->index && *s)
 		s += strlen(s) + 1;
-	
-	
+
+
 	data->value = kstrdup(s, GFP_KERNEL);
 }
 
@@ -1132,17 +1132,17 @@ read_oem_string(int index)
 {
 	int err;
 	struct oem_string_walker_data d = {.value = NULL, .index = index};
-	
+
 	err = dmi_walk(oem_string_walker, &d);
-	
+
 	if (err) {
 		if (d.value)
 			kfree(d.value);
-			
+
 		return NULL;
 	}
-	
-	
+
+
 	return d.value;
 }
 
@@ -1152,24 +1152,24 @@ parse_bios_version(const char *str)
 {
 	int bios_version;
 	const char *p = strchr(str, '.'), *p2;
-	
+
 	if (!p) return -EINVAL;
-	
+
 	p2 = strchr(p+1, '.');
-	
+
 	if (!p2) return -EINVAL;
-	
+
 	p += 1;
-	
+
 	bios_version = 0;
-	
+
 	while (p != p2) {
 		if (!isdigit(*p)) return -EINVAL;
-		
+
 		bios_version = 10 * bios_version + *p - '0';
 		p += 1;
 	}
-	
+
 	return bios_version;
 }
 
@@ -1178,38 +1178,38 @@ check_features(void)
 {
 	int bios_version;
 	const char *bios_version_str = dmi_get_system_info(DMI_BIOS_VERSION);
-	
+
 	if (!bios_version_str)
 		return -ENOENT;
-	
+
 	pr_info("BIOS version string: '%s'\n", bios_version_str);
-	
+
 	bios_version = parse_bios_version(bios_version_str);
-	
+
 	if (bios_version < 0)
 		return -EINVAL;
-	
+
 	pr_info("BIOS version: %04d\n", bios_version);
-	
+
 	if (bios_version >= 114) {
 		const char *s = read_oem_string(18);
-		
+
 		if (!s)
 			return -ENOENT;
-		
+
 		pr_info("OEM_STRING(18) = '%s'\n", s);
-		
+
 		/* if it is entirely spaces */
 		if (strspn(s, " ") == strlen(s)) {
 			features.fn_lock = true;
 			features.batt_charge_limit = true;
 			features.fan_extras = true;
 		}
-		
+
 		kfree(s);
 	}
-	
-	
+
+
 	return 0;
 }
 
@@ -1251,20 +1251,20 @@ static int __init
 setup_platform_dev(void)
 {
 	int err = 0;
-	
+
 	qc71_platform_dev = platform_device_alloc(DRIVERNAME, -1);
 	if (!qc71_platform_dev)
 		goto out;
-	
+
 	qc71_platform_dev->dev.groups = qc71_laptop_groups;
-	
+
 	err = platform_device_add(qc71_platform_dev);
 	if (err) {
 		platform_device_put(qc71_platform_dev);
 		qc71_platform_dev = NULL;
 		goto out;
 	}
-	
+
 
 out:
 	return err;
@@ -1293,7 +1293,7 @@ setup_battery_hook(void)
 		battery_hook_register(&qc71_laptop_batt_hook);
 		battery_hook_registered = true;
 	}
-	
+
 	return 0;
 }
 
@@ -1311,29 +1311,29 @@ static int __init
 setup_sysfs_attrs(void)
 {
 	size_t idx = 0;
-	
+
 	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_1.attr;
 	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_2.attr;
 	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_3.attr;
 	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_4.attr;
 	qc71_laptop_attrs[idx++] = &dev_attr_bios_ctrl_3.attr;
 	qc71_laptop_attrs[idx++] = &dev_attr_fan_ctrl.attr;
-	
+
 	qc71_laptop_attrs[idx++] = &dev_attr_fan_boost.attr;
-	
+
 	if (features.fn_lock) {
 		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock.attr;
 		qc71_laptop_attrs[idx++] = &dev_attr_ap_bios_byte.attr;
 	}
-	
+
 	if (features.fan_extras) {
 		qc71_laptop_attrs[idx++] = &dev_attr_fan_reduced_duty_cycle.attr;
 		qc71_laptop_attrs[idx++] = &dev_attr_fan_always_on.attr;
 	}
-	
-	
+
+
 	qc71_laptop_attrs[idx] = NULL;
-	
+
 	return 0;
 }
 
@@ -1351,16 +1351,16 @@ do_cleanup(void)
 	}
 
 	if (qc71_platform_dev) {
-		
+
 		if (qc71_hwmon_dev)
 			hwmon_device_unregister(qc71_hwmon_dev);
-			
+
 		if (lightbar_led_registered)
 			led_classdev_unregister(&qc71_lightbar_led);
 
 		platform_device_unregister(qc71_platform_dev);
 	}
-	
+
 	if (battery_hook_registered)
 		battery_hook_unregister(&qc71_laptop_batt_hook);
 }
@@ -1377,44 +1377,44 @@ qc71_laptop_module_init(void)
 		pr_err("no DMI match\n");
 		err = -ENODEV; goto out;
 	}
-	
+
 	if (!wmi_has_guid(QC71_WMI_WMBC_GUID)) {
 		pr_err("WMI GUID not found\n");
 		err = -ENODEV; goto out;
 	}
-	
+
 	err = setup_wmi_handlers();
 	if (err)
 		goto out;
-		
+
 
 	err = check_features();
 	if (err) {
 		pr_err("cannot check system features: %d\n", err);
 		goto out;
 	}
-	
+
 	pr_info("extra features: %s%s%s\n",
 		features.fn_lock  ? "fn-lock " : "",
 		features.batt_charge_limit ? "charge-limit " : "",
 		features.fan_extras ? "fan-extras " : "");
-	
+
 	err = setup_sysfs_attrs();
 	if (err)
 		goto out;
-	
+
 	err = setup_platform_dev();
 	if (err)
 		goto out;
-	
+
 	err = setup_hwmon();
 	if (err)
 		goto out;
-	
+
 	err = setup_battery_hook();
 	if (err)
 		goto out;
-	
+
 	err = setup_lightbar_led();
 	if (err)
 		goto out;
