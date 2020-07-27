@@ -1193,17 +1193,22 @@ check_features(void)
 
 	if (bios_version >= 114) {
 		const char *s = read_oem_string(18);
+		size_t s_len;
 
 		if (!s)
 			return -ENOENT;
 
+		s_len = strlen(s);
+
 		pr_info("OEM_STRING(18) = '%s'\n", s);
 
 		/* if it is entirely spaces */
-		if (strspn(s, " ") == strlen(s)) {
+		if (strspn(s, " ") == s_len) {
 			features.fn_lock = true;
 			features.batt_charge_limit = true;
 			features.fan_extras = true;
+		} else if (s_len > 0) {
+			// TODO
 		}
 
 		kfree(s);
