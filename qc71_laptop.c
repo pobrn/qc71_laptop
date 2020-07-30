@@ -550,18 +550,6 @@ static ssize_t fn_lock_store(struct device *dev,
 	return count;
 }
 
-static ssize_t charge_control_start_threshold_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "100\n");
-}
-
-static ssize_t charge_control_start_threshold_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	return count;
-}
-
 static ssize_t charge_control_end_threshold_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -680,7 +668,6 @@ static const struct attribute_group *qc71_laptop_groups[] = {
 
 
 
-static DEVICE_ATTR_RW(charge_control_start_threshold);
 static DEVICE_ATTR_RW(charge_control_end_threshold);
 
 
@@ -689,7 +676,6 @@ ATTRIBUTE_GROUPS(qc71_laptop);
 
 
 static struct attribute *qc71_laptop_batt_attrs[] = {
-	&dev_attr_charge_control_start_threshold.attr,
 	&dev_attr_charge_control_end_threshold.attr,
 	NULL,
 };
