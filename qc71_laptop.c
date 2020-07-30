@@ -1139,7 +1139,7 @@ read_oem_string(int index)
 		if (d.value)
 			kfree(d.value);
 
-		return NULL;
+		return ERR_PTR(err);
 	}
 
 
@@ -1195,8 +1195,8 @@ check_features(void)
 		const char *s = read_oem_string(18);
 		size_t s_len;
 
-		if (!s)
-			return -ENOENT;
+		if (IS_ERR_OR_NULL(s))
+			return PTR_ERR(s);
 
 		s_len = strlen(s);
 
@@ -1204,11 +1204,12 @@ check_features(void)
 
 		/* if it is entirely spaces */
 		if (strspn(s, " ") == s_len) {
-			features.fn_lock = true;
+			features.fn_lock           = true;
 			features.batt_charge_limit = true;
-			features.fan_extras = true;
+			features.fan_extras        = true;
 		} else if (s_len > 0) {
 			// TODO
+			pr_warn("cannot extract supported features");
 		}
 
 		kfree(s);
