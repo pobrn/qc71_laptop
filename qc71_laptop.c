@@ -905,6 +905,7 @@ static struct attribute *qc71_lightbar_led_attrs[] = {
 	&dev_attr_brightness_s3.attr,
 	&dev_attr_color.attr,
 	&dev_attr_rainbow_mode.attr,
+	NULL,
 };
 
 ATTRIBUTE_GROUPS(qc71_lightbar_led);
