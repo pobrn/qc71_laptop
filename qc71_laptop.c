@@ -1214,21 +1214,21 @@ setup_wmi_handlers(void)
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT0_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: %d\n", (int)status);
+		pr_err("could not install WMI notify handler: [%d] %s\n", (int)status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT1_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: %d\n", (int)status);
+		pr_err("could not install WMI notify handler: [%d] %s\n", (int)status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT2_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: %d\n", (int)status);
+		pr_err("could not install WMI notify handler: [%d] %s\n", (int)status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
