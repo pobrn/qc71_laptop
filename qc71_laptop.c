@@ -264,13 +264,13 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 
 static acpi_status qc71_ec_read(u16 addr, union qc71_ec_result *result)
 {
-	//pr_info("%s(addr=0x%04X)\n", __func__, (unsigned) addr);
+	pr_debug("%s(addr=0x%04X)\n", __func__, (unsigned) addr);
 	return qc71_ec_transaction(addr, 0, result, true);
 }
 
 static acpi_status qc71_ec_write(u16 addr, u16 data)
 {
-	//pr_info("%s(addr=0x%04X, data=0x%04X)\n", __func__, (unsigned) addr, (unsigned) data);
+	pr_debug("%s(addr=0x%04X, data=0x%04X)\n", __func__, (unsigned) addr, (unsigned) data);
 	return qc71_ec_transaction(addr, data, NULL, false);
 }
 
@@ -542,7 +542,7 @@ static ssize_t fn_lock_store(struct device *dev,
 
 	status = SET_BIT(status, AP_BIOS_BYTE_FN_LOCK, value);
 
-	status = ec_write_byte(AP_BIOS_BYTE_FN_LOCK, status);
+	status = ec_write_byte(AP_BIOS_BYTE_ADDR, status);
 
 	if (status < 0)
 		return status;
@@ -1376,11 +1376,6 @@ qc71_laptop_module_init(void)
 		err = -ENODEV; goto out;
 	}
 
-	err = setup_wmi_handlers();
-	if (err)
-		goto out;
-
-
 	err = check_features();
 	if (err) {
 		pr_err("cannot check system features: %d\n", err);
@@ -1391,6 +1386,10 @@ qc71_laptop_module_init(void)
 		features.fn_lock  ? "fn-lock " : "",
 		features.batt_charge_limit ? "charge-limit " : "",
 		features.fan_extras ? "fan-extras " : "");
+
+	err = setup_wmi_handlers();
+	if (err)
+		goto out;
 
 	err = setup_sysfs_attrs();
 	if (err)
