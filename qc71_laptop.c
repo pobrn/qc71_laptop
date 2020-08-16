@@ -166,10 +166,6 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define BIOS_CTRL_3_FAN_ALWAYS_ON BIT(6)
 
 
-#define AP_OEM_BYTE_ADDR       ADDR(0x07, 0x41)
-#define AP_OEM_BYTE_FAN_ABNORM BIT(5)
-
-
 #define FAN_MINSPEED_ADDR ADDR(0x7, 0x9E)
 #define FAN_MINTEMP_ADDR ADDR(0x7, 0x9F)
 #define FAN_EXTRASPEED_ADDR ADDR(0x7, 0xA0)
@@ -324,11 +320,11 @@ static int qc71_fan_get_rpm(u8 fan_index)
 static int
 qc71_fan_query_abnorm(void)
 {
-	int err = ec_read_byte(AP_OEM_BYTE_ADDR);
+	int err = ec_read_byte(CTRL_1_ADDR);
 	if (err < 0)
 		return err;
 
-	return !!(err & AP_OEM_BYTE_FAN_ABNORM);
+	return !!(err & CTRL_1_FAN_ABNORMAL);
 }
 
 /* ========================================================================== */
