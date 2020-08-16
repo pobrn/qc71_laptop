@@ -76,6 +76,16 @@ to uninstall the module.
 
 The module should automatically load at boot after this. If you want to load it immediately, run `sudo modprobe qc71_laptop`. If it reports an error, and you're convinced your device should be supported, please open an issue.
 
+## Upgrade
+
+If you installed the module with DKMS, and you wish to upgrade, first open the directory of the old sources, and run
+```
+sudo make dkmsuninstall
+```
+then update the sources (pull the repository, download the sources again manually, etc.), then run
+```
+sudo make dkmsinstall
+```
 
 # How to use
 ## Fan speeds
