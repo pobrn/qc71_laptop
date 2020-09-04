@@ -234,10 +234,9 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 	if (ACPI_FAILURE(status))
 		return status;
 
-	obj = (union acpi_object *)output.pointer;
+	obj = output.pointer;
 
 #if 0
-	pr_debug("obj = 0x%p\n", (void*) obj);
 	if (obj) {
 		pr_debug("obj->type = %d\n", (int) obj->type);
 
@@ -254,7 +253,6 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 		memcpy(result, obj->buffer.pointer, sizeof(*result));
 	}
 
-	//kfree(obj);
 	return status;
 }
 
@@ -1023,9 +1021,7 @@ qc71_wmi_event_handler(u32 value, void *context)
 	    return;
 	}
 
-	obj = (union acpi_object *)response.pointer;
-
-	pr_info("obj = 0x%p\n", obj);
+	obj = response.pointer;
 
 	if (obj) {
 		pr_info("obj->type = %d\n", (int) obj->type);
@@ -1040,7 +1036,6 @@ qc71_wmi_event_handler(u32 value, void *context)
 				pr_info("buf[%u] = 0x%02X\n", (unsigned) i, (unsigned) obj->buffer.pointer[i]);
 		}
 	}
-
 
 	switch (value) {
 		case 0xD2: qc71_wmi_event_d2_handler(obj); break;
@@ -1406,6 +1401,7 @@ qc71_laptop_module_init(void)
 	err = setup_lightbar_led();
 	if (err)
 		goto out;
+
 out:
 	if (err)
 		do_cleanup();
