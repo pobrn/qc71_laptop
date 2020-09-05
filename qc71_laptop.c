@@ -231,6 +231,8 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 
 	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0, QC71_WMBC_GETSETULONG_ID, &input, &output);
 
+	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%u] %s\n", __func__, (unsigned) addr, (unsigned) data, result ? "non-" : "", read ? "yes" : "no", (unsigned int) status, acpi_format_exception(status));
+
 	if (ACPI_FAILURE(status))
 		return status;
 
@@ -258,19 +260,19 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 
 static acpi_status qc71_ec_read(u16 addr, union qc71_ec_result *result)
 {
-	pr_debug("%s(addr=0x%04X)\n", __func__, (unsigned) addr);
 	return qc71_ec_transaction(addr, 0, result, true);
 }
 
 static acpi_status qc71_ec_write(u16 addr, u16 data)
 {
-	pr_debug("%s(addr=0x%04X, data=0x%04X)\n", __func__, (unsigned) addr, (unsigned) data);
 	return qc71_ec_transaction(addr, data, NULL, false);
 }
 
 static inline int ec_write_byte(u16 addr, u8 data)
 {
 	acpi_status status;
+
+	pr_debug("%s(addr=0x%04x, data=0x%02x)\n", __func__, (unsigned) addr, (unsigned) data);
 
 	status = qc71_ec_write(addr, data);
 
@@ -289,6 +291,8 @@ static inline int ec_read_byte(u16 addr)
 
 	if (ACPI_FAILURE(status) || result.dword == MAGIC)
 		return -EIO;
+
+	pr_debug("%s(addr=0x%04x): %02x %02x %02x %02x\n", __func__, (unsigned) addr, result.bytes.b1, result.bytes.b2, result.bytes.b3, result.bytes.b4);
 
 	return result.bytes.b1;
 }
