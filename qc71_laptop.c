@@ -32,7 +32,6 @@
 #include <linux/wmi.h>
 
 
-#define MAGIC ((u32) 0xDEADCAFE)
 #define DRIVERNAME "qc71_laptop"
 #define SET_BIT(value, bit, on) ( (on) ? ((value) | (bit)) : ((value) & ~(bit)) )
 
@@ -196,6 +195,7 @@ struct {
 } features;
 
 
+static DEFINE_MUTEX(ec_lock);
 
 /* data for 'do_cleanup()' */
 static bool battery_hook_registered = false,
@@ -207,7 +207,7 @@ static int  wmi_handlers_installed = 0;
 /* EC access */
 
 
-static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result, bool read)
+static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result, bool read)
 {
 	u8 buf[8] = {
 		addr & 0xFF,
@@ -223,74 +223,64 @@ static acpi_status qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result 
 	/* the returned ACPI_TYPE_BUFFER is 40 bytes long for some reason ... */
 	u8 outbuf_buf[sizeof(union acpi_object) + 40];
 
-
 	struct acpi_buffer input = { (acpi_size)sizeof(buf), buf };
 	struct acpi_buffer output = { (acpi_size) sizeof(outbuf_buf), outbuf_buf };
 	union acpi_object *obj;
 	acpi_status status;
+	int err;
+
+	err = mutex_lock_interruptible(&ec_lock);
+
+	if (err)
+		return err;
 
 	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0, QC71_WMBC_GETSETULONG_ID, &input, &output);
+
+	mutex_unlock(&ec_lock);
 
 	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%u] %s\n", __func__, (unsigned) addr, (unsigned) data, result ? "non-" : "", read ? "yes" : "no", (unsigned int) status, acpi_format_exception(status));
 
 	if (ACPI_FAILURE(status))
-		return status;
+		return -EIO;
 
 	obj = output.pointer;
 
-#if 0
-	if (obj) {
-		pr_debug("obj->type = %d\n", (int) obj->type);
-
-		if (obj->type == ACPI_TYPE_BUFFER) {
-			u32 i;
-
-			for (i = 0; i < obj->buffer.length; i++)
-				pr_debug("[%u] = 0x%02X\n", (unsigned) i, (unsigned) obj->buffer.pointer[i]);
-		}
-	}
-#endif
-
-	if (result && obj && obj->type == ACPI_TYPE_BUFFER && obj->buffer.length >= sizeof(*result)) {
-		memcpy(result, obj->buffer.pointer, sizeof(*result));
+	if (result) {
+		if (obj && obj->type == ACPI_TYPE_BUFFER && obj->buffer.length >= sizeof(*result))
+			memcpy(result, obj->buffer.pointer, sizeof(*result));
+		else
+			return -EIO;
 	}
 
-	return status;
+	return 0;
 }
 
-static acpi_status qc71_ec_read(u16 addr, union qc71_ec_result *result)
+static int qc71_ec_read(u16 addr, union qc71_ec_result *result)
 {
 	return qc71_ec_transaction(addr, 0, result, true);
 }
 
-static acpi_status qc71_ec_write(u16 addr, u16 data)
+static int qc71_ec_write(u16 addr, u16 data)
 {
 	return qc71_ec_transaction(addr, data, NULL, false);
 }
 
 static inline int ec_write_byte(u16 addr, u8 data)
 {
-	acpi_status status;
-
 	pr_debug("%s(addr=0x%04x, data=0x%02x)\n", __func__, (unsigned) addr, (unsigned) data);
 
-	status = qc71_ec_write(addr, data);
-
-	if (ACPI_FAILURE(status))
-		return -EIO;
-
-	return 0;
+	return qc71_ec_write(addr, data);
 }
 
 static inline int ec_read_byte(u16 addr)
 {
-	acpi_status status;
-	union qc71_ec_result result = {MAGIC};
+	int err;
+	union qc71_ec_result result;
 
-	status = qc71_ec_read(addr, &result);
+	err = qc71_ec_read(addr, &result);
 
-	if (ACPI_FAILURE(status) || result.dword == MAGIC)
-		return -EIO;
+	if (err)
+		return err;
 
 	pr_debug("%s(addr=0x%04x): %02x %02x %02x %02x\n", __func__, (unsigned) addr, result.bytes.b1, result.bytes.b2, result.bytes.b3, result.bytes.b4);
 
@@ -305,16 +295,16 @@ static inline int ec_read_byte(u16 addr)
 
 static int qc71_fan_get_rpm(u8 fan_index)
 {
-	union qc71_ec_result res = {MAGIC};
-	acpi_status status;
+	union qc71_ec_result res;
+	int err;
 
 	if (fan_index >= ARRAY_SIZE(qc71_fan_addrs))
 		return -EINVAL;
 
-	status = qc71_ec_read(qc71_fan_addrs[fan_index], &res);
+	err = qc71_ec_read(qc71_fan_addrs[fan_index], &res);
 
-	if (ACPI_FAILURE(status) || res.dword == MAGIC)
-		return -EIO;
+	if (err)
+		return err;
 
 	return res.bytes.b1 << 8 | res.bytes.b2;
 }
@@ -1250,9 +1240,7 @@ setup_platform_dev(void)
 	if (err) {
 		platform_device_put(qc71_platform_dev);
 		qc71_platform_dev = NULL;
-		goto out;
 	}
-
 
 out:
 	return err;
