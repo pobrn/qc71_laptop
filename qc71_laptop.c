@@ -144,11 +144,19 @@ static const u8 lightbar_pwm_to_level[][256] = {
 
 #define CTRL_1_ADDR         ADDR(0x07, 0x41)
 #define CTRL_1_MANUAL_MODE  BIT(0)
-#define CTRL_1_FAN_QUIET    BIT(2)
 #define CTRL_1_FAN_ABNORMAL BIT(5)
 
 #define CTRL_2_ADDR         ADDR(0x07, 0x8C)
+
 #define CTRL_3_ADDR         ADDR(0x07, 0xA5)
+#define CTRL_3_PWR_LED_MASK GENMASK(1, 0)
+#define CTRL_3_PWR_LED_NONE BIT(1)
+#define CTRL_3_PWR_LED_BOTH BIT(0)
+#define CTRL_3_PWR_LED_LEFT 0x00
+#define CTRL_3_FAN_QUIET    BIT(2)
+#define CTRL_3_OVERBOOST    BIT(4)
+#define CTRL_3_HIGH_PWR     BIT(7)
+
 #define CTRL_4_ADDR         ADDR(0x07, 0xA6)
 
 
@@ -238,7 +246,7 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 
 	mutex_unlock(&ec_lock);
 
-	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%u] %s\n", __func__, (unsigned) addr, (unsigned) data, result ? "non-" : "", read ? "yes" : "no", (unsigned int) status, acpi_format_exception(status));
+	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%lu] %s\n", __func__, (unsigned) addr, (unsigned) data, result ? "non-" : "", read ? "yes" : "no", (unsigned long) status, acpi_format_exception(status));
 
 	if (ACPI_FAILURE(status))
 		return -EIO;
@@ -249,7 +257,7 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 		if (obj && obj->type == ACPI_TYPE_BUFFER && obj->buffer.length >= sizeof(*result))
 			memcpy(result, obj->buffer.pointer, sizeof(*result));
 		else
-			return -EIO;
+			return -ENODATA;
 	}
 
 	return 0;
