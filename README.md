@@ -204,8 +204,6 @@ You can use `acpi_listen` to see what events are generated when you plug the mac
 
 # Troubleshooting
 
-## 'no such device' when loading the module
-
 * If you have the [`xmg_fusion_15`](https://github.com/pobrn/xmg_fusion_15) kernel module installed, please unload and delete it by running `sudo ./scripts/dkms_uninstall.sh` in its directory. It is of no use anymore.
 
-* The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. Please do not use the two at the same time.
+* The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. I do recommend using both at the same time.
