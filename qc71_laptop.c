@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-
+/* ========================================================================== */
 /* https://www.intel.com/content/dam/support/us/en/documents/laptops/whitebook/QC71_PROD_SPEC.pdf
  *
  *
@@ -10,6 +10,7 @@
  *  - https://github.com/tuxedocomputers/tuxedo-keyboard/
  *  - Control Center for Microsoft Windows
  */
+/* ========================================================================== */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
@@ -28,17 +29,20 @@
 #include <linux/string.h>
 #include <linux/wmi.h>
 
+/* ========================================================================== */
 
 #define DRIVERNAME "qc71_laptop"
+#define HWMON_NAME DRIVERNAME "_hwmon"
 #define SET_BIT(value, bit, on) ((on) ? ((value) | (bit)) : ((value) & ~(bit)))
 
+/* ========================================================================== */
 /* WMI methods */
 
 /* AcpiTest_MULong */
 #define QC71_WMI_WMBC_GUID       "ABBC0F6F-8EA1-11D1-00A0-C90629100000"
 #define QC71_WMBC_GETSETULONG_ID 4
 
-
+/* ========================================================================== */
 /* WMI events */
 
 /* AcpiTest_EventULong */
@@ -50,16 +54,15 @@
 /* AcpiTest_EventPackage */
 #define QC71_WMI_EVENT2_GUID     "ABBC0F70-8EA1-11D1-00A0-C90629100000"
 
+/* ========================================================================== */
 
-#define ADDR(page, offset)          (((u16)(page) << 8) | ((u16) (offset)))
+#define ADDR(page, offset)          (((u16)(page) << 8) | ((u16)(offset)))
 
 static const u16 qc71_fan_addrs[] = {
 	ADDR(0x04, 0x64),
 	ADDR(0x04, 0x6C),
 };
 
-
-/* lightbar */
 enum qc71_lightbar_color {
 	QC71_LIGHTBAR_RED   = 0,
 	QC71_LIGHTBAR_GREEN = 1,
@@ -72,6 +75,7 @@ static const u8 lightbar_colors[] = {
 	QC71_LIGHTBAR_BLUE,
 };
 
+/* lightbar control register */
 #define LIGHTBAR_CONTROL_ADDR   ADDR(0x07, 0x48)
 #define LIGHTBAR_CTRL_S0_OFF    BIT(2)
 #define LIGHTBAR_CTRL_S3_OFF    BIT(3)
@@ -131,19 +135,26 @@ static const u8 lightbar_pwm_to_level[][256] = {
 	},
 };
 
+/* register addresses and bitmasks,
+ * some of them are not used,
+ * only for documentation
+ */
+
 #define PROJ_ID_ADDR ADDR(0x07, 0x40)
 
-
+/* fan control register */
 #define FAN_CTRL_ADDR ADDR(0x07, 0x51)
 #define FAN_CTRL_FAN_BOOST BIT(6)
 
-
+/* 1st control register */
 #define CTRL_1_ADDR         ADDR(0x07, 0x41)
 #define CTRL_1_MANUAL_MODE  BIT(0)
 #define CTRL_1_FAN_ABNORMAL BIT(5)
 
+/* 2nd control register */
 #define CTRL_2_ADDR         ADDR(0x07, 0x8C)
 
+/* 3rd control register */
 #define CTRL_3_ADDR         ADDR(0x07, 0xA5)
 #define CTRL_3_PWR_LED_MASK GENMASK(1, 0)
 #define CTRL_3_PWR_LED_NONE BIT(1)
@@ -153,26 +164,26 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define CTRL_3_OVERBOOST    BIT(4)
 #define CTRL_3_HIGH_PWR     BIT(7)
 
+/* 4th control register*/
 #define CTRL_4_ADDR         ADDR(0x07, 0xA6)
-
 
 #define AP_BIOS_BYTE_ADDR ADDR(0x07, 0xA4)
 #define AP_BIOS_BYTE_FN_LOCK BIT(3)
 
+/* battery charger control register */
 #define BATT_CHARGE_CTRL_ADDR ADDR(0x07, 0xB9)
 #define BATT_CHARGE_CTRL_VALUE_MASK GENMASK(6, 0)
 #define BATT_CHARGE_CTRL_REACHED BIT(7)
 
-
+/* 3rd control register of a different kind */
 #define BIOS_CTRL_3_ADDR ADDR(0x7, 0xA3)
 #define BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE BIT(5)
 #define BIOS_CTRL_3_FAN_ALWAYS_ON BIT(6)
 
-
+/* these don't seem to work at all */
 #define FAN_MINSPEED_ADDR ADDR(0x7, 0x9E)
 #define FAN_MINTEMP_ADDR ADDR(0x7, 0x9F)
 #define FAN_EXTRASPEED_ADDR ADDR(0x7, 0xA0)
-
 
 union qc71_ec_result {
 	u32 dword;
@@ -187,7 +198,6 @@ union qc71_ec_result {
 		u8 b4;
 	} bytes;
 };
-
 
 static struct platform_device *qc71_platform_dev;
 static struct device *qc71_hwmon_dev;
@@ -204,7 +214,6 @@ static DEFINE_MUTEX(ec_lock);
 static bool battery_hook_registered,
 	    lightbar_led_registered;
 static int  wmi_handlers_installed;
-
 
 /* ========================================================================== */
 /* EC access */
@@ -236,11 +245,15 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 	if (err)
 		return err;
 
-	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0, QC71_WMBC_GETSETULONG_ID, &input, &output);
+	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0,
+				     QC71_WMBC_GETSETULONG_ID, &input, &output);
 
 	mutex_unlock(&ec_lock);
 
-	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%lu] %s\n", __func__, (unsigned int) addr, (unsigned int) data, result ? "non-" : "", read ? "yes" : "no", (unsigned long) status, acpi_format_exception(status));
+	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%lu] %s\n",
+		__func__, (unsigned int) addr, (unsigned int) data,
+		result ? "non-" : "", read ? "yes" : "no",
+		(unsigned long) status, acpi_format_exception(status));
 
 	if (ACPI_FAILURE(status))
 		return -EIO;
@@ -401,7 +414,7 @@ static int qc71_lightbar_set_color(int color)
 /* device attrs */
 
 static ssize_t fan_boost_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+			      struct device_attribute *attr, char *buf)
 {
 	int status = ec_read_byte(FAN_CTRL_ADDR);
 
@@ -411,8 +424,8 @@ static ssize_t fan_boost_show(struct device *dev,
 	return sprintf(buf, "%d\n", (int) !!(status & FAN_CTRL_ADDR));
 }
 
-static ssize_t fan_boost_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t fan_boost_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
 {
 	int status;
 	bool value;
@@ -435,7 +448,7 @@ static ssize_t fan_boost_store(struct device *dev,
 }
 
 static ssize_t fan_reduced_duty_cycle_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+					   struct device_attribute *attr, char *buf)
 {
 	int status = ec_read_byte(BIOS_CTRL_3_ADDR);
 
@@ -445,8 +458,8 @@ static ssize_t fan_reduced_duty_cycle_show(struct device *dev,
 	return sprintf(buf, "%d\n", (int) !!(status & BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE));
 }
 
-static ssize_t fan_reduced_duty_cycle_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t fan_reduced_duty_cycle_store(struct device *dev, struct device_attribute *attr,
+					    const char *buf, size_t count)
 {
 	int status;
 	bool value;
@@ -469,7 +482,7 @@ static ssize_t fan_reduced_duty_cycle_store(struct device *dev,
 }
 
 static ssize_t fan_always_on_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+				  struct device_attribute *attr, char *buf)
 {
 	int status = ec_read_byte(BIOS_CTRL_3_ADDR);
 
@@ -479,8 +492,8 @@ static ssize_t fan_always_on_show(struct device *dev,
 	return sprintf(buf, "%d\n", (int) !!(status & BIOS_CTRL_3_FAN_ALWAYS_ON));
 }
 
-static ssize_t fan_always_on_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t fan_always_on_store(struct device *dev, struct device_attribute *attr,
+				   const char *buf, size_t count)
 {
 	int status;
 	bool value;
@@ -502,8 +515,7 @@ static ssize_t fan_always_on_store(struct device *dev,
 	return count;
 }
 
-static ssize_t fn_lock_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+static ssize_t fn_lock_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int status = ec_read_byte(AP_BIOS_BYTE_ADDR);
 
@@ -513,8 +525,8 @@ static ssize_t fn_lock_show(struct device *dev,
 	return sprintf(buf, "%d\n", (int) !!(status & AP_BIOS_BYTE_FN_LOCK));
 }
 
-static ssize_t fn_lock_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
 {
 	int status;
 	bool value;
@@ -536,27 +548,27 @@ static ssize_t fn_lock_store(struct device *dev,
 	return count;
 }
 
-#define DEFINE_BYTE_ATTR(name, addr)                                  \
-static ssize_t name##_show(struct device *dev,                        \
-	struct device_attribute *attr, char *buf)                     \
-{                                                                     \
-	int status = ec_read_byte(addr);                              \
-	if (status < 0)                                               \
-		return status;                                        \
-	return sprintf(buf, "%d\n", status);                          \
-}                                                                     \
-static ssize_t name##_store(struct device *dev,                       \
-	struct device_attribute *attr, const char *buf, size_t count) \
-{                                                                     \
-	int status;                                                   \
-	u8 value;                                                     \
-	if (kstrtou8(buf, 10, &value))                                \
-		return -EINVAL;                                       \
-	status = ec_write_byte(addr, value);                          \
-	if (status < 0)                                               \
-		return status;                                        \
-	return count;                                                 \
-}                                                                     \
+#define DEFINE_BYTE_ATTR(name, addr)                                           \
+static ssize_t name##_show(struct device *dev,                                 \
+			   struct device_attribute *attr, char *buf)           \
+{                                                                              \
+	int status = ec_read_byte(addr);                                       \
+	if (status < 0)                                                        \
+		return status;                                                 \
+	return sprintf(buf, "%d\n", status);                                   \
+}                                                                              \
+static ssize_t name##_store(struct device *dev, struct device_attribute *attr, \
+			    const char *buf, size_t count)                     \
+{                                                                              \
+	int status;                                                            \
+	u8 value;                                                              \
+	if (kstrtou8(buf, 10, &value))                                         \
+		return -EINVAL;                                                \
+	status = ec_write_byte(addr, value);                                   \
+	if (status < 0)                                                        \
+		return status;                                                 \
+	return count;                                                          \
+}                                                                              \
 static DEVICE_ATTR_RW(name);
 
 DEFINE_BYTE_ATTR(ctrl_1, CTRL_1_ADDR)
@@ -579,7 +591,7 @@ ATTRIBUTE_GROUPS(qc71_laptop);
 /* battery */
 
 static ssize_t charge_control_end_threshold_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+						 struct device_attribute *attr, char *buf)
 {
 	int status = ec_read_byte(BATT_CHARGE_CTRL_ADDR);
 
@@ -594,8 +606,8 @@ static ssize_t charge_control_end_threshold_show(struct device *dev,
 	return sprintf(buf, "%d\n", status);
 }
 
-static ssize_t charge_control_end_threshold_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t charge_control_end_threshold_store(struct device *dev, struct device_attribute *attr,
+						  const char *buf, size_t count)
 {
 	int status, value;
 
@@ -653,7 +665,7 @@ static struct acpi_battery_hook qc71_laptop_batt_hook = {
 /* hwmon */
 
 static umode_t qc71_hwmon_is_visible(const void *data, enum hwmon_sensor_types type,
-	u32 attr, int channel)
+				     u32 attr, int channel)
 {
 	switch (type) {
 	case hwmon_fan:
@@ -673,7 +685,7 @@ static umode_t qc71_hwmon_is_visible(const void *data, enum hwmon_sensor_types t
 }
 
 static int qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
-	u32 attr, int channel, long *value)
+			   u32 attr, int channel, long *value)
 {
 	int err;
 
@@ -724,8 +736,7 @@ static struct hwmon_chip_info qc71_hwmon_chip_info = {
 /* ========================================================================== */
 /* lightbar attrs */
 
-static ssize_t lightbar_s3_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+static ssize_t lightbar_s3_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int value = qc71_lightbar_get_status();
 
@@ -735,8 +746,7 @@ static ssize_t lightbar_s3_show(struct device *dev,
 	return sprintf(buf, "%d\n", (int) !(value & LIGHTBAR_CTRL_S3_OFF));
 }
 
-static ssize_t lightbar_s3_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lightbar_s3_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int err;
 	bool value;
@@ -752,8 +762,7 @@ static ssize_t lightbar_s3_store(struct device *dev,
 	return count;
 }
 
-static ssize_t lightbar_color_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+static ssize_t lightbar_color_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int color = 0, i;
 
@@ -772,8 +781,8 @@ static ssize_t lightbar_color_show(struct device *dev,
 	return sprintf(buf, "%03d\n", color);
 }
 
-static ssize_t lightbar_color_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lightbar_color_store(struct device *dev, struct device_attribute *attr,
+				    const char *buf, size_t count)
 {
 	int err, value;
 
@@ -787,8 +796,7 @@ static ssize_t lightbar_color_store(struct device *dev,
 	return count;
 }
 
-static ssize_t lightbar_rainbow_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
+static ssize_t lightbar_rainbow_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int status = qc71_lightbar_get_status();
 
@@ -798,8 +806,8 @@ static ssize_t lightbar_rainbow_show(struct device *dev,
 	return sprintf(buf, "%d\n", (int) !!(status & LIGHTBAR_CTRL_RAINBOW));
 }
 
-static ssize_t lightbar_rainbow_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lightbar_rainbow_store(struct device *dev, struct device_attribute *attr,
+				      const char *buf, size_t count)
 {
 	int err;
 	bool value;
@@ -967,13 +975,15 @@ static void qc71_wmi_event_handler(u32 value, void *context)
 		pr_info("obj->type = %d\n", (int) obj->type);
 		if (obj->type == ACPI_TYPE_INTEGER) {
 			pr_info("int = %u\n", (unsigned int) obj->integer.value);
-		} else if (obj->type == ACPI_TYPE_STRING)
+		} else if (obj->type == ACPI_TYPE_STRING) {
 			pr_info("string = '%s'\n", obj->string.pointer);
-		else if (obj->type == ACPI_TYPE_BUFFER) {
+		} else if (obj->type == ACPI_TYPE_BUFFER) {
 			u32 i;
 
 			for (i = 0; i < obj->buffer.length; i++)
-				pr_info("buf[%u] = 0x%02X\n", (unsigned int) i, (unsigned int) obj->buffer.pointer[i]);
+				pr_info("buf[%u] = 0x%02X\n",
+					(unsigned int) i,
+					(unsigned int) obj->buffer.pointer[i]);
 		}
 	}
 
@@ -985,7 +995,6 @@ static void qc71_wmi_event_handler(u32 value, void *context)
 	case 0xD0:
 		break;
 	}
-
 
 	kfree(obj);
 }
@@ -1035,11 +1044,10 @@ static void __init oem_string_walker(const struct dmi_header *dm, void *ptr)
 		return;
 
 	i = 0;
-	s = ((u8 *) dm) + dm->length;
+	s = ((u8 *)dm) + dm->length;
 
 	while (i++ < data->index && *s)
 		s += strlen(s) + 1;
-
 
 	data->value = kstrdup(s, GFP_KERNEL);
 }
@@ -1056,7 +1064,6 @@ static char * __init read_oem_string(int index)
 		return ERR_PTR(err);
 	}
 
-
 	return d.value;
 }
 
@@ -1064,7 +1071,7 @@ static char * __init read_oem_string(int index)
 /* setup */
 
 /* QCCFL357.0062.2020.0313.1530 -> 62 */
-static inline int __init parse_bios_version(const char *str)
+static inline int __pure __init parse_bios_version(const char *str)
 {
 	int bios_version;
 	const char *p = strchr(str, '.'), *p2;
@@ -1072,7 +1079,7 @@ static inline int __init parse_bios_version(const char *str)
 	if (!p)
 		return -EINVAL;
 
-	p2 = strchr(p+1, '.');
+	p2 = strchr(p + 1, '.');
 
 	if (!p2)
 		return -EINVAL;
@@ -1133,7 +1140,6 @@ static int __init check_features(void)
 		kfree(s);
 	}
 
-
 	return 0;
 }
 
@@ -1144,31 +1150,31 @@ static int __init setup_wmi_handlers(void)
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT0_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [%d] %s\n", (int)status, acpi_format_exception(status));
+		pr_err("could not install WMI notify handler: [0x%08x] %s\n",
+			(unsigned int) status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT1_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [%d] %s\n", (int)status, acpi_format_exception(status));
+		pr_err("could not install WMI notify handler: [0x%08x] %s\n",
+			(unsigned int) status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT2_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [%d] %s\n", (int)status, acpi_format_exception(status));
+		pr_err("could not install WMI notify handler: [0x%08x] %s\n",
+			(unsigned int) status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
-
 out:
 	return err;
 }
-
-
 
 static int __init setup_platform_dev(void)
 {
@@ -1194,9 +1200,8 @@ static int __init setup_hwmon(void)
 {
 	int err = 0;
 
-	qc71_hwmon_dev = hwmon_device_register_with_info(
-		&qc71_platform_dev->dev, DRIVERNAME "_hwmon", NULL,
-		&qc71_hwmon_chip_info, NULL);
+	qc71_hwmon_dev = hwmon_device_register_with_info(&qc71_platform_dev->dev, HWMON_NAME,
+							 NULL, &qc71_hwmon_chip_info, NULL);
 
 	if (IS_ERR(qc71_hwmon_dev)) {
 		err = PTR_ERR(qc71_hwmon_dev);
@@ -1249,23 +1254,23 @@ static int __init setup_sysfs_attrs(void)
 		qc71_laptop_attrs[idx++] = &dev_attr_fan_always_on.attr;
 	}
 
-
 	qc71_laptop_attrs[idx] = NULL;
 
 	return 0;
 }
 
-
+/* ========================================================================== */
+/* cleanup */
 
 static void do_cleanup(void)
 {
 	switch (wmi_handlers_installed) {
 	case 3:
-		wmi_remove_notify_handler(QC71_WMI_EVENT2_GUID); /* fallthrough */
+		wmi_remove_notify_handler(QC71_WMI_EVENT2_GUID); fallthrough;
 	case 2:
-		wmi_remove_notify_handler(QC71_WMI_EVENT1_GUID); /* fallthrough */
+		wmi_remove_notify_handler(QC71_WMI_EVENT1_GUID); fallthrough;
 	case 1:
-		wmi_remove_notify_handler(QC71_WMI_EVENT0_GUID); /* fallthrough */
+		wmi_remove_notify_handler(QC71_WMI_EVENT0_GUID); fallthrough;
 	default:
 		break;
 	}
