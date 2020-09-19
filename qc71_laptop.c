@@ -1196,6 +1196,7 @@ out:
 	return err;
 }
 
+/* platform device must be set up when this is called */
 static int __init setup_hwmon(void)
 {
 	int err = 0;
@@ -1221,6 +1222,7 @@ static int __init setup_battery_hook(void)
 	return 0;
 }
 
+/* platform device must be set up when this is called */
 static int __init setup_lightbar_led(void)
 {
 	int err = led_classdev_register(&qc71_platform_dev->dev, &qc71_lightbar_led);
@@ -1271,8 +1273,6 @@ static void do_cleanup(void)
 		wmi_remove_notify_handler(QC71_WMI_EVENT1_GUID); fallthrough;
 	case 1:
 		wmi_remove_notify_handler(QC71_WMI_EVENT0_GUID); fallthrough;
-	default:
-		break;
 	}
 
 	if (qc71_platform_dev) {
