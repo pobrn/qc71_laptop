@@ -6,7 +6,7 @@
  * based on the following resources:
  *  - https://lwn.net/Articles/391230/
  *  - http://blog.nietrzeba.pl/2011/12/mof-decompilation.html
- *  - https://deb.tuxedocomputers.com/ubuntu/pool/main/t/tuxedo-cc-wmi/tuxedo-cc-wmi_0.1.4_all.deb
+ *  - https://github.com/tuxedocomputers/tuxedo-cc-wmi/
  *  - https://github.com/tuxedocomputers/tuxedo-keyboard/
  *  - Control Center for Microsoft Windows
  */
@@ -18,8 +18,10 @@
 #include <acpi/battery.h>
 #include <linux/acpi.h>
 #include <linux/bits.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
+#include <linux/error-injection.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
 #include <linux/leds.h>
@@ -215,6 +217,27 @@ static bool battery_hook_registered,
 	    lightbar_led_registered;
 static int  wmi_handlers_installed;
 
+static struct dentry *qc71_debugfs_dir;
+
+/* ========================================================================== */
+/* module parameters */
+
+static bool __maybe_unused nolightbar;
+module_param(nolightbar, bool, 0444);
+MODULE_PARM_DESC(nolightbar, "do not register the lightbar to the leds subsystem");
+
+static bool __maybe_unused nohwmon;
+module_param(nohwmon, bool, 0444);
+MODULE_PARM_DESC(nohwmon, "do not report to the hardware monitoring subsystem");
+
+static bool __maybe_unused nobattery;
+module_param(nobattery, bool, 0444);
+MODULE_PARM_DESC(nobattery, "do not expose battery related controls");
+
+static bool __maybe_unused debugregs;
+module_param(debugregs, bool, 0444);
+MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs");
+
 /* ========================================================================== */
 /* EC access */
 
@@ -269,6 +292,7 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 
 	return 0;
 }
+ALLOW_ERROR_INJECTION(qc71_ec_transaction, ERRNO);
 
 static int qc71_ec_read(u16 addr, union qc71_ec_result *result)
 {
@@ -397,11 +421,11 @@ static int qc71_lightbar_set_rainbow_mode(bool on)
 	return qc71_lightbar_write_ctrl(SET_BIT(status, LIGHTBAR_CTRL_RAINBOW, on));
 }
 
-static int qc71_lightbar_set_color(int color)
+static int qc71_lightbar_set_color(unsigned int color)
 {
 	int err = 0, i;
 
-	if (!(0 <= color && color <= 999))
+	if (color > 999) /* color must lie in [0, 999] */
 		return -EINVAL;
 
 	for (i = ARRAY_SIZE(lightbar_colors)-1; i >= 0 && err == 0; i--, color /= 10)
@@ -515,7 +539,8 @@ static ssize_t fan_always_on_store(struct device *dev, struct device_attribute *
 	return count;
 }
 
-static ssize_t fn_lock_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t fn_lock_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
 {
 	int status = ec_read_byte(AP_BIOS_BYTE_ADDR);
 
@@ -548,43 +573,56 @@ static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
-#define DEFINE_BYTE_ATTR(name, addr)                                           \
-static ssize_t name##_show(struct device *dev,                                 \
-			   struct device_attribute *attr, char *buf)           \
-{                                                                              \
-	int status = ec_read_byte(addr);                                       \
-	if (status < 0)                                                        \
-		return status;                                                 \
-	return sprintf(buf, "%d\n", status);                                   \
-}                                                                              \
-static ssize_t name##_store(struct device *dev, struct device_attribute *attr, \
-			    const char *buf, size_t count)                     \
-{                                                                              \
-	int status;                                                            \
-	u8 value;                                                              \
-	if (kstrtou8(buf, 10, &value))                                         \
-		return -EINVAL;                                                \
-	status = ec_write_byte(addr, value);                                   \
-	if (status < 0)                                                        \
-		return status;                                                 \
-	return count;                                                          \
-}                                                                              \
-static DEVICE_ATTR_RW(name);
+static const struct qc71_debugfs_attr {
+	const char *name;
+	u16 addr;
+} qc71_debugfs_attrs[] = {
+	{"ctrl_1",       CTRL_1_ADDR},
+	{"ctrl_2",       CTRL_2_ADDR},
+	{"ctrl_3",       CTRL_3_ADDR},
+	{"ctrl_4",       CTRL_4_ADDR},
+	{"ap_bios_byte", AP_BIOS_BYTE_ADDR},
+	{"bios_ctrl_3",  BIOS_CTRL_3_ADDR},
+	{"fan_ctrl",     FAN_CTRL_ADDR},
+};
 
-DEFINE_BYTE_ATTR(ctrl_1, CTRL_1_ADDR)
-DEFINE_BYTE_ATTR(ctrl_2, CTRL_2_ADDR)
-DEFINE_BYTE_ATTR(ctrl_3, CTRL_3_ADDR)
-DEFINE_BYTE_ATTR(ctrl_4, CTRL_4_ADDR)
-DEFINE_BYTE_ATTR(ap_bios_byte, AP_BIOS_BYTE_ADDR)
-DEFINE_BYTE_ATTR(bios_ctrl_3, BIOS_CTRL_3_ADDR)
-DEFINE_BYTE_ATTR(fan_ctrl, FAN_CTRL_ADDR)
+static int get_debugfs_byte(void *data, u64 *value)
+{
+	const struct qc71_debugfs_attr *attr = data;
+	int status = ec_read_byte(attr->addr);
+
+	if (status < 0)
+		return status;
+
+	*value = status;
+
+	return 0;
+}
+
+static int set_debugfs_byte(void *data, u64 value)
+{
+	const struct qc71_debugfs_attr *attr = data;
+	int status;
+
+	if (value > U8_MAX)
+		return -EINVAL;
+
+	status = ec_write_byte(attr->addr, (u8) value);
+
+	if (status < 0)
+		return status;
+
+	return status;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(qc71_debugfs_fops, get_debugfs_byte, set_debugfs_byte, "0x%02llx\n");
 
 static DEVICE_ATTR_RW(fn_lock);
 static DEVICE_ATTR_RW(fan_boost);
 static DEVICE_ATTR_RW(fan_always_on);
 static DEVICE_ATTR_RW(fan_reduced_duty_cycle);
 
-static struct attribute *qc71_laptop_attrs[16];
+static struct attribute *qc71_laptop_attrs[5];
 ATTRIBUTE_GROUPS(qc71_laptop);
 
 /* ========================================================================== */
@@ -736,7 +774,8 @@ static struct hwmon_chip_info qc71_hwmon_chip_info = {
 /* ========================================================================== */
 /* lightbar attrs */
 
-static ssize_t lightbar_s3_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t lightbar_s3_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
 {
 	int value = qc71_lightbar_get_status();
 
@@ -746,7 +785,8 @@ static ssize_t lightbar_s3_show(struct device *dev, struct device_attribute *att
 	return sprintf(buf, "%d\n", (int) !(value & LIGHTBAR_CTRL_S3_OFF));
 }
 
-static ssize_t lightbar_s3_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lightbar_s3_store(struct device *dev, struct device_attribute *attr,
+				 const char *buf, size_t count)
 {
 	int err;
 	bool value;
@@ -762,9 +802,10 @@ static ssize_t lightbar_s3_store(struct device *dev, struct device_attribute *at
 	return count;
 }
 
-static ssize_t lightbar_color_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t lightbar_color_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
 {
-	int color = 0, i;
+	unsigned int color = 0, i;
 
 	for (i = 0; i < ARRAY_SIZE(lightbar_colors); i++) {
 		int level = qc71_lightbar_get_color_level(lightbar_colors[i]);
@@ -778,15 +819,16 @@ static ssize_t lightbar_color_show(struct device *dev, struct device_attribute *
 			color += level;
 	}
 
-	return sprintf(buf, "%03d\n", color);
+	return sprintf(buf, "%03u\n", color);
 }
 
 static ssize_t lightbar_color_store(struct device *dev, struct device_attribute *attr,
 				    const char *buf, size_t count)
 {
-	int err, value;
+	unsigned int value;
+	int err;
 
-	if (kstrtoint(buf, 10, &value))
+	if (kstrtouint(buf, 10, &value))
 		return -EINVAL;
 
 	err = qc71_lightbar_set_color(value);
@@ -796,7 +838,8 @@ static ssize_t lightbar_color_store(struct device *dev, struct device_attribute 
 	return count;
 }
 
-static ssize_t lightbar_rainbow_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t lightbar_rainbow_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
 {
 	int status = qc71_lightbar_get_status();
 
@@ -1201,8 +1244,9 @@ static int __init setup_hwmon(void)
 {
 	int err = 0;
 
-	qc71_hwmon_dev = hwmon_device_register_with_info(&qc71_platform_dev->dev, HWMON_NAME,
-							 NULL, &qc71_hwmon_chip_info, NULL);
+	qc71_hwmon_dev = hwmon_device_register_with_info(&qc71_platform_dev->dev,
+							 HWMON_NAME, NULL,
+							 &qc71_hwmon_chip_info, NULL);
 
 	if (IS_ERR(qc71_hwmon_dev)) {
 		err = PTR_ERR(qc71_hwmon_dev);
@@ -1237,19 +1281,10 @@ static int __init setup_sysfs_attrs(void)
 {
 	size_t idx = 0;
 
-	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_1.attr;
-	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_2.attr;
-	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_3.attr;
-	qc71_laptop_attrs[idx++] = &dev_attr_ctrl_4.attr;
-	qc71_laptop_attrs[idx++] = &dev_attr_bios_ctrl_3.attr;
-	qc71_laptop_attrs[idx++] = &dev_attr_fan_ctrl.attr;
-
 	qc71_laptop_attrs[idx++] = &dev_attr_fan_boost.attr;
 
-	if (features.fn_lock) {
+	if (features.fn_lock)
 		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock.attr;
-		qc71_laptop_attrs[idx++] = &dev_attr_ap_bios_byte.attr;
-	}
 
 	if (features.fan_extras) {
 		qc71_laptop_attrs[idx++] = &dev_attr_fan_reduced_duty_cycle.attr;
@@ -1258,7 +1293,37 @@ static int __init setup_sysfs_attrs(void)
 
 	qc71_laptop_attrs[idx] = NULL;
 
+	WARN_ON(idx >= ARRAY_SIZE(qc71_laptop_attrs));
+
 	return 0;
+}
+
+static int __init setup_debugfs(void)
+{
+	unsigned int i;
+	int err = 0;
+
+	qc71_debugfs_dir = debugfs_create_dir(DRIVERNAME, NULL);
+
+	if (IS_ERR(qc71_debugfs_dir)) {
+		err = PTR_ERR(qc71_debugfs_dir);
+		qc71_debugfs_dir = NULL;
+		goto out;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(qc71_debugfs_attrs); i++) {
+		const struct qc71_debugfs_attr *attr = &qc71_debugfs_attrs[i];
+		struct dentry *d = debugfs_create_file(attr->name, 0600, qc71_debugfs_dir,
+						       (void *) attr, &qc71_debugfs_fops);
+
+		if (IS_ERR(d)) {
+			err = PTR_ERR(d);
+			goto out;
+		}
+	}
+
+out:
+	return err;
 }
 
 /* ========================================================================== */
@@ -1273,20 +1338,22 @@ static void do_cleanup(void)
 		wmi_remove_notify_handler(QC71_WMI_EVENT1_GUID); fallthrough;
 	case 1:
 		wmi_remove_notify_handler(QC71_WMI_EVENT0_GUID); fallthrough;
+	default:
+		break;
 	}
 
-	if (qc71_platform_dev) {
-		if (qc71_hwmon_dev)
-			hwmon_device_unregister(qc71_hwmon_dev);
+	debugfs_remove_recursive(qc71_debugfs_dir);
 
-		if (lightbar_led_registered)
-			led_classdev_unregister(&qc71_lightbar_led);
-
-		platform_device_unregister(qc71_platform_dev);
-	}
+	if (lightbar_led_registered)
+		led_classdev_unregister(&qc71_lightbar_led);
 
 	if (battery_hook_registered)
 		battery_hook_unregister(&qc71_laptop_batt_hook);
+
+	if (qc71_hwmon_dev)
+		hwmon_device_unregister(qc71_hwmon_dev);
+
+	platform_device_unregister(qc71_platform_dev);
 }
 
 /* ========================================================================== */
@@ -1329,17 +1396,29 @@ static int __init qc71_laptop_module_init(void)
 	if (err)
 		goto out;
 
-	err = setup_hwmon();
-	if (err)
-		goto out;
+	if (!nohwmon) {
+		err = setup_hwmon();
+		if (err)
+			goto out;
+	}
 
-	err = setup_battery_hook();
-	if (err)
-		goto out;
+	if (!nobattery) {
+		err = setup_battery_hook();
+		if (err)
+			goto out;
+	}
 
-	err = setup_lightbar_led();
-	if (err)
-		goto out;
+	if (!nolightbar) {
+		err = setup_lightbar_led();
+		if (err)
+			goto out;
+	}
+
+	if (debugregs) {
+		err = setup_debugfs();
+		if (err)
+			goto out;
+	}
 
 out:
 	if (err)
