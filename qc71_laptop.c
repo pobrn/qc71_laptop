@@ -1307,7 +1307,6 @@ static int __init setup_debugfs(void)
 
 	if (IS_ERR(qc71_debugfs_dir)) {
 		err = PTR_ERR(qc71_debugfs_dir);
-		qc71_debugfs_dir = NULL;
 		goto out;
 	}
 
