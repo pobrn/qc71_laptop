@@ -1066,6 +1066,7 @@ static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 #endif
 	{ },
 };
+MODULE_DEVICE_TABLE(dmi, qc71_dmi_table);
 
 struct oem_string_walker_data {
 	char *value;
@@ -1443,5 +1444,3 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Barnabás Pőcze <pobrn@protonmail.com>");
 MODULE_DESCRIPTION("QC71 laptop platform driver");
 MODULE_VERSION("0.1");
-
-MODULE_DEVICE_TABLE(dmi, qc71_dmi_table);
