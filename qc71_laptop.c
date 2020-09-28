@@ -243,7 +243,7 @@ MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs");
 
 static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result, bool read)
 {
-	u8 buf[8] = {
+	u8 buf[] = {
 		addr & 0xFF,
 		addr >> 8,
 		data & 0xFF,
@@ -253,44 +253,50 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 		0,
 		0,
 	};
+	static_assert(ARRAY_SIZE(buf) == 8);
 
 	/* the returned ACPI_TYPE_BUFFER is 40 bytes long for some reason ... */
 	u8 outbuf_buf[sizeof(union acpi_object) + 40];
 
-	struct acpi_buffer input = { (acpi_size)sizeof(buf), buf };
-	struct acpi_buffer output = { (acpi_size) sizeof(outbuf_buf), outbuf_buf };
+	struct acpi_buffer input = { (acpi_size) sizeof(buf), buf },
+			   output = { (acpi_size) sizeof(outbuf_buf), outbuf_buf };
 	union acpi_object *obj;
 	acpi_status status;
-	int err;
 
-	err = mutex_lock_interruptible(&ec_lock);
+	int err = mutex_lock_interruptible(&ec_lock);
 
 	if (err)
-		return err;
+		goto out;
 
 	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0,
 				     QC71_WMBC_GETSETULONG_ID, &input, &output);
 
 	mutex_unlock(&ec_lock);
 
-	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%sNULL, read=%s): [%lu] %s\n",
-		__func__, (unsigned int) addr, (unsigned int) data,
-		result ? "non-" : "", read ? "yes" : "no",
-		(unsigned long) status, acpi_format_exception(status));
-
-	if (ACPI_FAILURE(status))
-		return -EIO;
+	if (ACPI_FAILURE(status)) {
+		err = -EIO;
+		goto out;
+	}
 
 	obj = output.pointer;
 
 	if (result) {
-		if (obj && obj->type == ACPI_TYPE_BUFFER && obj->buffer.length >= sizeof(*result))
+		if (obj && obj->type == ACPI_TYPE_BUFFER && obj->buffer.length >= sizeof(*result)) {
 			memcpy(result, obj->buffer.pointer, sizeof(*result));
-		else
-			return -ENODATA;
+		} else {
+			err = -ENODATA;
+			goto out;
+		}
 	}
 
-	return 0;
+out:
+	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%s, read=%s): (%d) [%lu] %s\n",
+		__func__, (unsigned int) addr, (unsigned int) data,
+		result ? "wants" : "NULL", read ? "yes" : "no", err,
+		(unsigned long) status, acpi_format_exception(status));
+
+
+	return err;
 }
 ALLOW_ERROR_INJECTION(qc71_ec_transaction, ERRNO);
 
@@ -306,9 +312,6 @@ static int qc71_ec_write(u16 addr, u16 data)
 
 static inline int ec_write_byte(u16 addr, u8 data)
 {
-	pr_debug("%s(addr=0x%04x, data=0x%02x)\n",
-		__func__, (unsigned int) addr, (unsigned int) data);
-
 	return qc71_ec_write(addr, data);
 }
 
@@ -905,6 +908,7 @@ static struct led_classdev qc71_lightbar_led = {
 
 /* ========================================================================== */
 /* WMI events */
+/* for debugging */
 
 static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 {
@@ -1301,8 +1305,8 @@ static int __init setup_sysfs_attrs(void)
 
 static int __init setup_debugfs(void)
 {
-	unsigned int i;
 	int err = 0;
+	size_t i;
 
 	qc71_debugfs_dir = debugfs_create_dir(DRIVERNAME, NULL);
 
