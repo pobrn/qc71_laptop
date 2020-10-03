@@ -29,6 +29,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/string.h>
+#include <linux/types.h>
 #include <linux/wmi.h>
 
 /* ========================================================================== */
@@ -58,7 +59,7 @@
 
 /* ========================================================================== */
 
-#define ADDR(page, offset)          (((u16)(page) << 8) | ((u16)(offset)))
+#define ADDR(page, offset)       (((u16)(page) << 8) | ((u16)(offset)))
 
 static const u16 qc71_fan_addrs[] = {
 	ADDR(0x04, 0x64),
@@ -66,15 +67,15 @@ static const u16 qc71_fan_addrs[] = {
 };
 
 enum qc71_lightbar_color {
-	QC71_LIGHTBAR_RED   = 0,
-	QC71_LIGHTBAR_GREEN = 1,
-	QC71_LIGHTBAR_BLUE  = 2,
+	LIGHTBAR_RED   = 0,
+	LIGHTBAR_GREEN = 1,
+	LIGHTBAR_BLUE  = 2,
 };
 
 static const u8 lightbar_colors[] = {
-	QC71_LIGHTBAR_RED,
-	QC71_LIGHTBAR_GREEN,
-	QC71_LIGHTBAR_BLUE,
+	LIGHTBAR_RED,
+	LIGHTBAR_GREEN,
+	LIGHTBAR_BLUE,
 };
 
 /* lightbar control register */
@@ -84,20 +85,20 @@ static const u8 lightbar_colors[] = {
 #define LIGHTBAR_CTRL_RAINBOW   BIT(7)
 
 static const u16 lightbar_color_addrs[] = {
-	[QC71_LIGHTBAR_RED]   = ADDR(0x07, 0x49),
-	[QC71_LIGHTBAR_GREEN] = ADDR(0x07, 0x4A),
-	[QC71_LIGHTBAR_BLUE]  = ADDR(0x07, 0x4B),
+	[LIGHTBAR_RED]   = ADDR(0x07, 0x49),
+	[LIGHTBAR_GREEN] = ADDR(0x07, 0x4A),
+	[LIGHTBAR_BLUE]  = ADDR(0x07, 0x4B),
 };
 
 static const u8 lightbar_color_values[][10] = {
-	[QC71_LIGHTBAR_RED]   = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
-	[QC71_LIGHTBAR_GREEN] = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
-	[QC71_LIGHTBAR_BLUE]  = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
+	[LIGHTBAR_RED]   = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
+	[LIGHTBAR_GREEN] = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
+	[LIGHTBAR_BLUE]  = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 };
 
 /* inverse of 'lightbar_color_values' */
 static const u8 lightbar_pwm_to_level[][256] = {
-	[QC71_LIGHTBAR_RED] = {
+	[LIGHTBAR_RED] = {
 		 [0] = 0,
 		 [4] = 1,
 		 [8] = 2,
@@ -110,7 +111,7 @@ static const u8 lightbar_pwm_to_level[][256] = {
 		[36] = 9,
 	},
 
-	[QC71_LIGHTBAR_GREEN] = {
+	[LIGHTBAR_GREEN] = {
 		 [0] = 0,
 		 [4] = 1,
 		 [8] = 2,
@@ -123,7 +124,7 @@ static const u8 lightbar_pwm_to_level[][256] = {
 		[36] = 9,
 	},
 
-	[QC71_LIGHTBAR_BLUE] = {
+	[LIGHTBAR_BLUE] = {
 		 [0] = 0,
 		 [4] = 1,
 		 [8] = 2,
@@ -137,7 +138,8 @@ static const u8 lightbar_pwm_to_level[][256] = {
 	},
 };
 
-/* register addresses and bitmasks,
+/*
+ * EC register addresses and bitmasks,
  * some of them are not used,
  * only for documentation
  */
@@ -148,13 +150,17 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define FAN_CTRL_ADDR ADDR(0x07, 0x51)
 #define FAN_CTRL_FAN_BOOST BIT(6)
 
+#define FAN_MODE_INDEX_ADDR ADDR(0x07, 0xAB)
+#define FAN_MODE_INDEX_LOW_MASK GENMASK(3, 0)
+#define FAN_MODE_INDEX_HIGH_MASK GENMASK(7, 4)
+
 /* 1st control register */
 #define CTRL_1_ADDR         ADDR(0x07, 0x41)
 #define CTRL_1_MANUAL_MODE  BIT(0)
 #define CTRL_1_FAN_ABNORMAL BIT(5)
 
 /* 2nd control register */
-#define CTRL_2_ADDR         ADDR(0x07, 0x8C)
+#define CTRL_2_ADDR ADDR(0x07, 0x8C)
 
 /* 3rd control register */
 #define CTRL_3_ADDR         ADDR(0x07, 0xA5)
@@ -167,7 +173,30 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define CTRL_3_HIGH_PWR     BIT(7)
 
 /* 4th control register*/
-#define CTRL_4_ADDR         ADDR(0x07, 0xA6)
+#define CTRL_4_ADDR                   ADDR(0x07, 0xA6)
+#define CTRL_4_OVERBOOST_DYN_TEMP_OFF BIT(1)
+
+#define SUPPORT_1_ADDR      ADDR(0x07, 0x65)
+
+#define SUPPORT_2_ADDR      ADDR(0x07, 0x66)
+
+#define SUPPORT_5_ADDR      ADDR(0x07, 0x42)
+#define SUPPORT_5_FAN       BIT(5)
+
+#define STATUS_1_ADDR           ADDR(0x07, 0x68)
+#define STATUS_1_SUPER_KEY_LOCK BIT(0)
+
+#define TRIGGER_1_ADDR           ADDR(0x07, 0x67)
+#define TRIGGER_1_SUPER_KEY_LOCK BIT(0)
+
+#define TRIGGER_2_ADDR ADDR(0x07, 0x5D)
+
+#define BIOS_INFO_1_ADDR ADDR(0x04, 0x9F)
+#define BIOS_INFO_5_ADDR ADDR(0x04, 0x66)
+
+#define POWER_STATUS_ADDR ADDR(0x04, 0x5E)
+#define POWER_SOURCE_ADDR ADDR(0x04, 0x90)
+#define PLATFORM_ID_ADDR  ADDR(0x04, 0x56)
 
 #define AP_BIOS_BYTE_ADDR ADDR(0x07, 0xA4)
 #define AP_BIOS_BYTE_FN_LOCK BIT(3)
@@ -177,15 +206,26 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define BATT_CHARGE_CTRL_VALUE_MASK GENMASK(6, 0)
 #define BATT_CHARGE_CTRL_REACHED BIT(7)
 
-/* 3rd control register of a different kind */
-#define BIOS_CTRL_3_ADDR ADDR(0x7, 0xA3)
-#define BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE BIT(5)
-#define BIOS_CTRL_3_FAN_ALWAYS_ON BIT(6)
+#define BATT_STATUS_ADDR        ADDR(0x04, 0x32)
+#define BATT_STATUS_DISCHARDING BIT(0)
 
-/* these don't seem to work at all */
-#define FAN_MINSPEED_ADDR ADDR(0x7, 0x9E)
-#define FAN_MINTEMP_ADDR ADDR(0x7, 0x9F)
-#define FAN_EXTRASPEED_ADDR ADDR(0x7, 0xA0)
+/* possibly temp (in C) = value / 10 + X */
+#define BATT_TEMP_ADDR ADDR(0x04, 0xA2)
+
+#define BATT_ALERT_ADDR ADDR(0x04, 0x94)
+
+#define BIOS_CTRL_1_ADDR           ADDR(0x07, 0x4E)
+#define BIOS_CTRL_1_FN_LOCK_STATUS BIT(4)
+
+#define BIOS_CTRL_2_ADDR       ADDR(0x07, 0x82)
+#define BIOS_CTRL_2_FAN_V2_NEW BIT(0)
+#define BIOS_CTRL_2_FAN_QKEY   BIT(1)
+#define BIOS_CTRL_2_FAN_V3     BIT(3)
+
+/* 3rd control register of a different kind */
+#define BIOS_CTRL_3_ADDR                   ADDR(0x7, 0xA3)
+#define BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE BIT(5)
+#define BIOS_CTRL_3_FAN_ALWAYS_ON          BIT(6)
 
 union qc71_ec_result {
 	u32 dword;
@@ -290,10 +330,10 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 	}
 
 out:
-	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%s, read=%s): (%d) [%lu] %s\n",
-		__func__, (unsigned int) addr, (unsigned int) data,
-		result ? "wants" : "NULL", read ? "yes" : "no", err,
-		(unsigned long) status, acpi_format_exception(status));
+	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%s, read=%s): (%d) [%08lx] %s\n",
+		 __func__, (unsigned int) addr, (unsigned int) data,
+		 result ? "wants" : "NULL", read ? "yes" : "no", err,
+		 (unsigned long) status, acpi_format_exception(status));
 
 
 	return err;
@@ -326,8 +366,8 @@ static inline int ec_read_byte(u16 addr)
 		return err;
 
 	pr_debug("%s(addr=0x%04x): %02x %02x %02x %02x\n",
-		__func__, (unsigned int) addr,
-		result.bytes.b1, result.bytes.b2, result.bytes.b3, result.bytes.b4);
+		 __func__, (unsigned int) addr, result.bytes.b1,
+		 result.bytes.b2, result.bytes.b3, result.bytes.b4);
 
 	return result.bytes.b1;
 }
@@ -576,17 +616,74 @@ static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+static ssize_t super_key_lock_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	int status = ec_read_byte(STATUS_1_ADDR);
+
+	if (status < 0)
+		return status;
+
+	return sprintf(buf, "%d\n", (int) !!(status & STATUS_1_SUPER_KEY_LOCK));
+}
+
+static ssize_t super_key_lock_store(struct device *dev, struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	int status;
+	bool value;
+
+	if (kstrtobool(buf, &value))
+		return -EINVAL;
+
+	status = ec_read_byte(STATUS_1_ADDR);
+	if (status < 0)
+		return status;
+
+	if (value != !!(status & STATUS_1_SUPER_KEY_LOCK)) {
+		status = ec_write_byte(TRIGGER_1_ADDR, TRIGGER_1_SUPER_KEY_LOCK);
+
+		if (status < 0)
+			return status;
+	}
+
+	return count;
+}
+
 static const struct qc71_debugfs_attr {
 	const char *name;
 	u16 addr;
 } qc71_debugfs_attrs[] = {
-	{"ctrl_1",       CTRL_1_ADDR},
-	{"ctrl_2",       CTRL_2_ADDR},
-	{"ctrl_3",       CTRL_3_ADDR},
-	{"ctrl_4",       CTRL_4_ADDR},
-	{"ap_bios_byte", AP_BIOS_BYTE_ADDR},
-	{"bios_ctrl_3",  BIOS_CTRL_3_ADDR},
-	{"fan_ctrl",     FAN_CTRL_ADDR},
+	{"ap_bios_byte",     AP_BIOS_BYTE_ADDR},
+	{"batt_alert",       BATT_ALERT_ADDR},
+	{"batt_charge_ctrl", BATT_CHARGE_CTRL_ADDR},
+	{"batt_status",      BATT_STATUS_ADDR},
+	{"battt_temp",       BATT_TEMP_ADDR},
+	{"bios_ctrl_1",      BIOS_CTRL_1_ADDR},
+	{"bios_ctrl_2",      BIOS_CTRL_2_ADDR},
+	{"bios_ctrl_3",      BIOS_CTRL_3_ADDR},
+	{"bios_info_1",      BIOS_INFO_1_ADDR},
+	{"bios_info_5",      BIOS_INFO_5_ADDR},
+	{"ctrl_1",           CTRL_1_ADDR},
+	{"ctrl_2",           CTRL_2_ADDR},
+	{"ctrl_3",           CTRL_3_ADDR},
+	{"ctrl_4",           CTRL_4_ADDR},
+	{"fan_ctrl",         FAN_CTRL_ADDR},
+	{"fan_mode_index",   FAN_MODE_INDEX_ADDR},
+	{"lightbar_ctrl",    LIGHTBAR_CONTROL_ADDR},
+	{"lightbar_red",     lightbar_color_addrs[LIGHTBAR_RED]},
+	{"lightbar_green",   lightbar_color_addrs[LIGHTBAR_GREEN]},
+	{"lightbar_blue",    lightbar_color_addrs[LIGHTBAR_BLUE]},
+	{"support_1",        SUPPORT_1_ADDR},
+	{"support_2",        SUPPORT_2_ADDR},
+	{"support_5",        SUPPORT_5_ADDR},
+	{"status_1",         STATUS_1_ADDR},
+	{"platform_id",      PLATFORM_ID_ADDR},
+	{"power_source",     POWER_SOURCE_ADDR},
+	{"project_id",       PROJ_ID_ADDR},
+	{"pwr_status",       POWER_STATUS_ADDR},
+	{"trigger_1",        TRIGGER_1_ADDR},
+	{"trigger_2",        TRIGGER_2_ADDR},
 };
 
 static int get_debugfs_byte(void *data, u64 *value)
@@ -624,8 +721,9 @@ static DEVICE_ATTR_RW(fn_lock);
 static DEVICE_ATTR_RW(fan_boost);
 static DEVICE_ATTR_RW(fan_always_on);
 static DEVICE_ATTR_RW(fan_reduced_duty_cycle);
+static DEVICE_ATTR_RW(super_key_lock);
 
-static struct attribute *qc71_laptop_attrs[5];
+static struct attribute *qc71_laptop_attrs[6];
 ATTRIBUTE_GROUPS(qc71_laptop);
 
 /* ========================================================================== */
@@ -718,6 +816,16 @@ static umode_t qc71_hwmon_is_visible(const void *data, enum hwmon_sensor_types t
 			break;
 		}
 		break;
+#if 0
+	case hwmon_temp:
+		switch (attr) {
+		case hwmon_temp_input:
+		case hwmon_temp_label:
+			return 0444;
+		default:
+			break;
+		}
+#endif
 	default:
 		break;
 	}
@@ -751,6 +859,21 @@ static int qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
 			return -EOPNOTSUPP;
 		}
 		break;
+#if 0
+	case hwmon_temp:
+		switch (attr) {
+		case hwmon_temp_input:
+			err = ec_read_byte(BATT_TEMP_ADDR);
+			if (err < 0)
+				return err;
+
+			*value = err * 100;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		break;
+#endif
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -758,15 +881,45 @@ static int qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
 	return 0;
 }
 
+#if 0
+static int qc71_hwmon_read_string(struct device *dev, enum hwmon_sensor_types type,
+				  u32 attr, int channel, const char **str)
+{
+	switch (type) {
+	case hwmon_temp:
+		switch (attr) {
+		case hwmon_temp_label:
+			*str = "battery";
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+#endif
+
 static const struct hwmon_channel_info *qc71_hwmon_ch_info[] = {
-	HWMON_CHANNEL_INFO(fan, HWMON_F_INPUT, HWMON_F_INPUT),
-	HWMON_CHANNEL_INFO(fan, HWMON_F_FAULT, HWMON_F_FAULT),
+	HWMON_CHANNEL_INFO(fan,
+			   HWMON_F_INPUT | HWMON_F_FAULT,
+			   HWMON_F_INPUT | HWMON_F_FAULT),
+#if 0
+	HWMON_CHANNEL_INFO(temp,
+			   HWMON_T_INPUT | HWMON_T_LABEL),
+#endif
 	NULL,
 };
 
 static struct hwmon_ops qc71_hwmon_ops = {
 	.is_visible  = qc71_hwmon_is_visible,
 	.read        = qc71_hwmon_read,
+#if 0
+	.read_string = qc71_hwmon_read_string,
+#endif
 };
 
 static struct hwmon_chip_info qc71_hwmon_chip_info = {
@@ -946,6 +1099,14 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 		pr_info("increase volume\n");
 		break;
 
+	case 57:
+		pr_info("lightbar on\n");
+		break;
+
+	case 58:
+		pr_info("lightbar off\n");
+		break;
+
 	/* enable super key (win key) lock */
 	case 64:
 		pr_info("enable super key lock\n");
@@ -964,6 +1125,10 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 	/* super key (win key) state changed */
 	case 165:
 		pr_info("super key lock state changed\n");
+		break;
+
+	case 166:
+		pr_info("lightbar state changed\n");
 		break;
 
 	/* fan boost state changed */
@@ -1049,25 +1214,13 @@ static void qc71_wmi_event_handler(u32 value, void *context)
 /* ========================================================================== */
 /* DMI */
 
-#ifdef CONFIG_DMI
-static int __init qc71_dmi_callback(const struct dmi_system_id *id)
-{
-	pr_info("'%s' found\n", id->ident);
-	return 1;
-}
-#endif
-
 static const struct dmi_system_id qc71_dmi_table[] __initconst = {
-#ifdef CONFIG_DMI
 	{
-		.callback = qc71_dmi_callback,
-		.ident = "LAPQC71X",
 		.matches = {
 			DMI_MATCH(DMI_BOARD_NAME, "LAPQC71"),
 			{ },
 		}
 	},
-#endif
 	{ },
 };
 MODULE_DEVICE_TABLE(dmi, qc71_dmi_table);
@@ -1198,24 +1351,24 @@ static int __init setup_wmi_handlers(void)
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT0_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [0x%08x] %s\n",
-			(unsigned int) status, acpi_format_exception(status));
+		pr_err("could not install WMI notify handler: [0x%08lx] %s\n",
+		       (unsigned long) status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT1_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [0x%08x] %s\n",
-			(unsigned int) status, acpi_format_exception(status));
+		pr_err("could not install WMI notify handler: [0x%08lx] %s\n",
+		       (unsigned long) status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
 
 	status = wmi_install_notify_handler(QC71_WMI_EVENT2_GUID, qc71_wmi_event_handler, NULL);
 	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [0x%08x] %s\n",
-			(unsigned int) status, acpi_format_exception(status));
+		pr_err("could not install WMI notify handler: [0x%08lx] %s\n",
+		       (unsigned long) status, acpi_format_exception(status));
 		err = -ENODEV; goto out;
 	}
 	wmi_handlers_installed += 1;
@@ -1287,6 +1440,7 @@ static int __init setup_sysfs_attrs(void)
 	size_t idx = 0;
 
 	qc71_laptop_attrs[idx++] = &dev_attr_fan_boost.attr;
+	qc71_laptop_attrs[idx++] = &dev_attr_super_key_lock.attr;
 
 	if (features.fn_lock)
 		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock.attr;
