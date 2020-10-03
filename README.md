@@ -172,6 +172,18 @@ The file `/sys/class/power_supply/BAT0/charge_control_end_threshold` contains th
 will cause charging to stop when the battery reaches 60% of its capacity.
 
 
+## Super key (windows key) lock
+It is possible to disable the super (windows) key by pressing Fn+F2 (or just F2 if the Fn lock is enabled). This can be also achieved by changing the writing the appropriate value into `/sys/devices/platform/qc71_laptop/super_key_lock`.
+```
+# echo 1 > /sys/devices/platform/qc71_laptop/super_key_lock
+```
+disables the super key, while
+```
+# echo 0 > /sys/devices/platform/qc71_laptop/super_key_lock
+```
+enables it. Reading the file will provide information about the current state of the super key. `0` means enabled, `1` means disabled.
+
+
 ## Example use
 
 The XMG Control Center can change the color if the device is on battery or plugged in. Fortunately you can easily achieve the same using [acpid](https://wiki.archlinux.org/index.php/Acpid). Modifying the appropriate part of `/etc/acpi/handler.sh` like this:
@@ -206,4 +218,4 @@ You can use `acpi_listen` to see what events are generated when you plug the mac
 
 * If you have the [`xmg_fusion_15`](https://github.com/pobrn/xmg_fusion_15) kernel module installed, please unload and delete it by running `sudo ./scripts/dkms_uninstall.sh` in its directory. It is of no use anymore.
 
-* The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. I do recommend using both at the same time.
+* The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. I do not recommend using both at the same time.
