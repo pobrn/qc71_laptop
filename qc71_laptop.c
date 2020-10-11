@@ -138,6 +138,8 @@ static const u8 lightbar_pwm_to_level[][256] = {
 	},
 };
 
+//#define HWMON_BATTERY
+
 /*
  * EC register addresses and bitmasks,
  * some of them are not used,
@@ -816,7 +818,7 @@ static umode_t qc71_hwmon_is_visible(const void *data, enum hwmon_sensor_types t
 			break;
 		}
 		break;
-#if 0
+#ifdef HWMON_BATTERY
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_input:
@@ -859,7 +861,7 @@ static int qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
 			return -EOPNOTSUPP;
 		}
 		break;
-#if 0
+#ifdef HWMON_BATTERY
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_input:
@@ -881,7 +883,7 @@ static int qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
 	return 0;
 }
 
-#if 0
+#ifdef HWMON_BATTERY
 static int qc71_hwmon_read_string(struct device *dev, enum hwmon_sensor_types type,
 				  u32 attr, int channel, const char **str)
 {
@@ -907,7 +909,7 @@ static const struct hwmon_channel_info *qc71_hwmon_ch_info[] = {
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT),
-#if 0
+#ifdef HWMON_BATTERY
 	HWMON_CHANNEL_INFO(temp,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 #endif
@@ -917,7 +919,7 @@ static const struct hwmon_channel_info *qc71_hwmon_ch_info[] = {
 static struct hwmon_ops qc71_hwmon_ops = {
 	.is_visible  = qc71_hwmon_is_visible,
 	.read        = qc71_hwmon_read,
-#if 0
+#ifdef HWMON_BATTERY
 	.read_string = qc71_hwmon_read_string,
 #endif
 };
@@ -1074,6 +1076,16 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 		pr_info("caps lock\n");
 		break;
 
+	/* num lock */
+	case 2:
+		pr_info("num lock\n");
+		break;
+
+	/* scroll lock */
+	case 3:
+		pr_info("scroll lock\n");
+		break;
+
 	/* increase screen brightness */
 	case 20:
 		pr_info("increase screen brightness\n");
@@ -1082,6 +1094,16 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 	/* decrease screen brightness */
 	case 21:
 		pr_info("decrease screen brightness\n");
+		break;
+
+	/* radio on */
+	case 26:
+		pr_info("radio on\n");
+		break;
+
+	/* radio off */
+	case 27:
+		pr_info("radio off\n");
 		break;
 
 	/* mute/unmute */
@@ -1125,6 +1147,7 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 	/* super key (win key) state changed */
 	case 165:
 		pr_info("super key lock state changed\n");
+		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "super_key_lock");
 		break;
 
 	case 166:
@@ -1173,7 +1196,7 @@ static void qc71_wmi_event_handler(u32 value, void *context)
 	union acpi_object *obj;
 	acpi_status status;
 
-	pr_info("%s(value=0x%08X) called\n", __func__, (unsigned int) value);
+	pr_info("%s(value=0x%02X) called\n", __func__, (unsigned int) value);
 	status = wmi_get_event_data(value, &response);
 
 	if (status != AE_OK) {
@@ -1406,10 +1429,8 @@ static int __init setup_hwmon(void)
 							 HWMON_NAME, NULL,
 							 &qc71_hwmon_chip_info, NULL);
 
-	if (IS_ERR(qc71_hwmon_dev)) {
+	if (IS_ERR(qc71_hwmon_dev))
 		err = PTR_ERR(qc71_hwmon_dev);
-		qc71_hwmon_dev = NULL;
-	}
 
 	return err;
 }
@@ -1508,7 +1529,7 @@ static void do_cleanup(void)
 	if (battery_hook_registered)
 		battery_hook_unregister(&qc71_laptop_batt_hook);
 
-	if (qc71_hwmon_dev)
+	if (!IS_ERR_OR_NULL(qc71_hwmon_dev))
 		hwmon_device_unregister(qc71_hwmon_dev);
 
 	platform_device_unregister(qc71_platform_dev);
