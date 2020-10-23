@@ -1510,8 +1510,8 @@ static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 	{
 		/* https://avell.com.br/avell-a60-muv-295765 */
 		.matches = {
-			DMI_EXACT_MATCH(DMI_CHASSIS_VENDOR, "AvellHighPerformance"),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "A60MUV"),
+			DMI_EXACT_MATCH(DMI_CHASSIS_VENDOR, "Avell High Performance"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "A60 MUV"),
 			{ }
 		}
 	},
