@@ -34,9 +34,11 @@
 #include <linux/types.h>
 #include <linux/wmi.h>
 
+ACPI_MODULE_NAME(KBUILD_MODNAME)
+
 /* ========================================================================== */
 
-#define DRIVERNAME "qc71_laptop"
+#define DRIVERNAME KBUILD_MODNAME
 #define HWMON_NAME DRIVERNAME "_hwmon"
 #define SET_BIT(value, bit, on) ((on) ? ((value) | (bit)) : ((value) & ~(bit)))
 
@@ -268,6 +270,7 @@ struct {
 } features;
 
 static DEFINE_MUTEX(ec_lock);
+static DEFINE_MUTEX(fan_lock);
 
 /* data for 'do_cleanup()' */
 #if IS_ENABLED(CONFIG_ACPI_BATTERY)
@@ -284,31 +287,35 @@ static int wmi_handlers_installed;
 static struct dentry *qc71_debugfs_dir;
 #endif
 
+#if IS_ENABLED(CONFIG_HWMON)
+static int fan_last_level;
+#endif
+
 /* ========================================================================== */
 /* module parameters */
 
 #if IS_ENABLED(CONFIG_LEDS_CLASS)
 static bool nolightbar;
 module_param(nolightbar, bool, 0444);
-MODULE_PARM_DESC(nolightbar, "do not register the lightbar to the leds subsystem");
+MODULE_PARM_DESC(nolightbar, "do not register the lightbar to the leds subsystem (default=false)");
 #endif
 
 #if IS_ENABLED(CONFIG_HWMON)
 static bool nohwmon;
 module_param(nohwmon, bool, 0444);
-MODULE_PARM_DESC(nohwmon, "do not report to the hardware monitoring subsystem");
+MODULE_PARM_DESC(nohwmon, "do not report to the hardware monitoring subsystem (default=false)");
 #endif
 
 #if IS_ENABLED(CONFIG_ACPI_BATTERY)
 static bool nobattery;
 module_param(nobattery, bool, 0444);
-MODULE_PARM_DESC(nobattery, "do not expose battery related controls");
+MODULE_PARM_DESC(nobattery, "do not expose battery related controls (default=false)");
 #endif
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static bool debugregs;
 module_param(debugregs, bool, 0444);
-MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs");
+MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs (default=false)");
 #endif
 
 /* ========================================================================== */
@@ -427,53 +434,130 @@ static int qc71_fan_get_rpm(u8 fan_index)
 
 static int qc71_fan_query_abnorm(void)
 {
-	int err = ec_read_byte(CTRL_1_ADDR);
+	int res = ec_read_byte(CTRL_1_ADDR);
 
+	if (res < 0)
+		return res;
+
+	return !!(res & CTRL_1_FAN_ABNORMAL);
+}
+
+/* 'fan_lock' must be held */
+static int qc71_fan_get_status(void)
+{
+	int res = ec_read_byte(FAN_CTRL_ADDR);
+	if (res < 0)
+		return res;
+
+	if ((res & 0x80) == (res & ~FAN_CTRL_LEVEL_MASK))
+		fan_last_level = res & FAN_CTRL_LEVEL_MASK;
+
+	return res;
+}
+
+/* 'fan_lock' must be held */
+static int qc71_fan_get_mode_core(void)
+{
+	int err = ec_read_byte(CTRL_1_ADDR);
 	if (err < 0)
 		return err;
 
-	return !!(err & CTRL_1_FAN_ABNORMAL);
+	if (err & CTRL_1_MANUAL_MODE) {
+		err = qc71_fan_get_status();
+		if (err < 0)
+			return err;
+
+		if (err & FAN_CTRL_FAN_BOOST)
+			err = 0; /* disengaged */
+		else
+			err = 1; /* manual */
+
+	} else {
+		err = 2; /* automatic fan control */
+	}
+
+	return err;
 }
 
 static int qc71_fan_get_mode(void)
 {
-	int err = ec_read_byte(CTRL_1_ADDR);
-
-	if (err < 0)
+	int err = mutex_lock_interruptible(&fan_lock);
+	if (err)
 		return err;
 
-	if (!(err & CTRL_1_MANUAL_MODE))
-		return 2; /* automatic fan control */
+	err = qc71_fan_get_mode_core();
 
-	err = ec_read_byte(FAN_CTRL_ADDR);
-
-	if (err < 0)
-		return err;
-
-	if (err & FAN_CTRL_FAN_BOOST)
-		return 0; /* disengaged */
-
-	return 1; /* manual */
+	mutex_unlock(&fan_lock);
+	return err; 
 }
 
-static int qc71_fan_set_pwm(u8 level)
+/* 'fan_lock' must be held */
+static int qc71_fan_set_level_core(u8 level)
 {
+	int err = ec_write_byte(FAN_CTRL_ADDR, FAN_CTRL_LEVEL(level));
+	if (err)
+		return err;
+
+	fan_last_level = level;
+	return 0;
+}
+
+static int qc71_fan_set_level(u8 level)
+{
+	int err;
+
 	if (level > FAN_CTRL_MAX_LEVEL)
 		return -EINVAL;
 
-	return ec_write_byte(FAN_CTRL_ADDR, FAN_CTRL_LEVEL(level));
+	err = mutex_lock_interruptible(&fan_lock);
+	if (err)
+		return err;
+
+	err = qc71_fan_get_mode_core();
+	if (err < 0)
+		goto out;
+
+	if (err == 1) { /* manual mode */
+		err = qc71_fan_set_level_core(level);
+	} else {
+		fan_last_level = level;
+		err = 0;
+	}
+
+out:
+	mutex_unlock(&fan_lock);
+	return err;
+}
+
+
+static int qc71_fan_get_level(void)
+{
+	int err = mutex_lock_interruptible(&fan_lock);
+	if (err)
+		return err;
+
+	err = qc71_fan_get_status();
+	if (err < 0)
+		goto out;
+
+	err = fan_last_level;
+out:
+	mutex_unlock(&fan_lock);
+	return err;
 }
 
 static int qc71_fan_set_mode(u8 mode)
 {
-	int err;
+	int err = mutex_lock_interruptible(&fan_lock);
+	if (err)
+		return err;
 
 	switch (mode) {
 	case 0:
 		err = ec_write_byte(FAN_CTRL_ADDR, FAN_CTRL_FAN_BOOST);
 		break;
 	case 1:
-		err = qc71_fan_set_pwm(0);
+		err = qc71_fan_set_level_core(fan_last_level);
 		break;
 	case 2:
 		err = ec_write_byte(FAN_CTRL_ADDR, 0xA0);
@@ -483,6 +567,7 @@ static int qc71_fan_set_mode(u8 mode)
 		break;
 	}
 
+	mutex_unlock(&fan_lock);
 	return err;
 }
 
@@ -560,7 +645,7 @@ static int qc71_lightbar_set_color(unsigned int color)
 	if (color > 999) /* color must lie in [0, 999] */
 		return -EINVAL;
 
-	for (i = ARRAY_SIZE(lightbar_colors) - 1; i >= 0 && err == 0; i--, color /= 10)
+	for (i = ARRAY_SIZE(lightbar_colors) - 1; i >= 0 && !err; i--, color /= 10)
 		err = qc71_lightbar_set_color_level(lightbar_colors[i], color % 10);
 
 	return err;
@@ -1016,19 +1101,11 @@ static int qc71_hwmon_write(struct device *device, enum hwmon_sensor_types type,
 static ssize_t fan_pwm1_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
-	int err = qc71_fan_get_mode();
+	int res = qc71_fan_get_level();
+	if (res < 0)
+		return res;
 
-	if (err < 0)
-		return err;
-
-	if (err != 1) /* if not in manual mode */
-		return -EOPNOTSUPP;
-
-	err = ec_read_byte(FAN_CTRL_ADDR);
-	if (err < 0)
-		return err;
-
-	return sprintf(buf, "%ld\n", (err & FAN_CTRL_LEVEL_MASK) * 255 / 7);
+	return sprintf(buf, "%d\n", res * 255 / 7);
 }
 
 static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
@@ -1043,7 +1120,7 @@ static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
 	if (value > 255)
 		return -EINVAL;
 
-	err = qc71_fan_set_pwm(value / 32);
+	err = qc71_fan_set_level(value / 32);
 	if (err)
 		return err;
 
