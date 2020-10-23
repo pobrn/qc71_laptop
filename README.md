@@ -8,7 +8,7 @@ This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fu
 
 
 # Compatibility
-It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4` kernel series.
+It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4` and `5.8` kernel series.
 
 
 # Dependencies
