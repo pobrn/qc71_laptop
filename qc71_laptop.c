@@ -1504,7 +1504,15 @@ static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 	{
 		.matches = {
 			DMI_MATCH(DMI_BOARD_NAME, "LAPQC71"),
-			{ },
+			{ }
+		}
+	},
+	{
+		/* https://avell.com.br/avell-a60-muv-295765 */
+		.matches = {
+			DMI_EXACT_MATCH(DMI_CHASSIS_VENDOR, "AvellHighPerformance"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "A60MUV"),
+			{ }
 		}
 	},
 	{ }
