@@ -159,12 +159,17 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define PROJ_ID_ADDR ADDR(0x07, 0x40)
 
 /* fan control register */
-#define FAN_CTRL_ADDR       ADDR(0x07, 0x51)
-#define FAN_CTRL_LEVEL_MASK GENMASK(2, 0)
-#define FAN_CTRL_MAX_LEVEL 7
-#define FAN_CTRL_TURBO BIT(4)
-#define FAN_CTRL_FAN_BOOST  BIT(6)
+#define FAN_CTRL_ADDR         ADDR(0x07, 0x51)
+#define FAN_CTRL_LEVEL_MASK   GENMASK(2, 0)
+#define FAN_CTRL_MAX_LEVEL    7
+#define FAN_CTRL_TURBO        BIT(4)
+#define FAN_CTRL_AUTO         BIT(5)
+#define FAN_CTRL_FAN_BOOST    BIT(6)
 #define FAN_CTRL_LEVEL(level) (128 + (level))
+
+#define FAN_PWM_1_ADDR ADDR(0x18, 0x04)
+#define FAN_PWM_2_ADDR ADDR(0x18, 0x09)
+#define FAN_MAX_PWM 200
 
 #define FAN_MODE_INDEX_ADDR ADDR(0x07, 0xAB)
 #define FAN_MODE_INDEX_LOW_MASK GENMASK(3, 0)
@@ -285,10 +290,6 @@ static int wmi_handlers_installed;
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static struct dentry *qc71_debugfs_dir;
-#endif
-
-#if IS_ENABLED(CONFIG_HWMON)
-static int fan_last_level;
 #endif
 
 /* ========================================================================== */
@@ -442,23 +443,29 @@ static int qc71_fan_query_abnorm(void)
 	return !!(res & CTRL_1_FAN_ABNORMAL);
 }
 
-/* 'fan_lock' must be held */
 static int qc71_fan_get_status(void)
 {
-	int res = ec_read_byte(FAN_CTRL_ADDR);
-	if (res < 0)
-		return res;
+	return ec_read_byte(FAN_CTRL_ADDR);
+}
 
-	if ((res & 0x80) == (res & ~FAN_CTRL_LEVEL_MASK))
-		fan_last_level = res & FAN_CTRL_LEVEL_MASK;
+static int qc71_fan_get_pwm(void)
+{
+	return ec_read_byte(FAN_PWM_1_ADDR);
+}
 
-	return res;
+static int qc71_fan_set_pwm(u8 pwm)
+{
+	if (pwm > FAN_MAX_PWM)
+		return -EINVAL;
+
+	return ec_write_byte(FAN_PWM_1_ADDR, pwm);
 }
 
 /* 'fan_lock' must be held */
 static int qc71_fan_get_mode_core(void)
 {
 	int err = ec_read_byte(CTRL_1_ADDR);
+
 	if (err < 0)
 		return err;
 
@@ -467,11 +474,22 @@ static int qc71_fan_get_mode_core(void)
 		if (err < 0)
 			return err;
 
-		if (err & FAN_CTRL_FAN_BOOST)
-			err = 0; /* disengaged */
-		else
-			err = 1; /* manual */
+		if (err & FAN_CTRL_FAN_BOOST) {
+			err = qc71_fan_get_pwm();
 
+			if (err < 0)
+				return err;
+
+			if (err == FAN_MAX_PWM)
+				err = 0; /* disengaged */
+			else
+				err = 1; /* manual */
+
+		} else if (err & FAN_CTRL_AUTO) {
+			err = 1; /* manual */
+		} else {
+			err = 2; /* automatic fan control */
+		}
 	} else {
 		err = 2; /* automatic fan control */
 	}
@@ -482,91 +500,53 @@ static int qc71_fan_get_mode_core(void)
 static int qc71_fan_get_mode(void)
 {
 	int err = mutex_lock_interruptible(&fan_lock);
+
 	if (err)
 		return err;
 
 	err = qc71_fan_get_mode_core();
 
-	mutex_unlock(&fan_lock);
-	return err; 
-}
-
-/* 'fan_lock' must be held */
-static int qc71_fan_set_level_core(u8 level)
-{
-	int err = ec_write_byte(FAN_CTRL_ADDR, FAN_CTRL_LEVEL(level));
-	if (err)
-		return err;
-
-	fan_last_level = level;
-	return 0;
-}
-
-static int qc71_fan_set_level(u8 level)
-{
-	int err;
-
-	if (level > FAN_CTRL_MAX_LEVEL)
-		return -EINVAL;
-
-	err = mutex_lock_interruptible(&fan_lock);
-	if (err)
-		return err;
-
-	err = qc71_fan_get_mode_core();
-	if (err < 0)
-		goto out;
-
-	if (err == 1) { /* manual mode */
-		err = qc71_fan_set_level_core(level);
-	} else {
-		fan_last_level = level;
-		err = 0;
-	}
-
-out:
-	mutex_unlock(&fan_lock);
-	return err;
-}
-
-
-static int qc71_fan_get_level(void)
-{
-	int err = mutex_lock_interruptible(&fan_lock);
-	if (err)
-		return err;
-
-	err = qc71_fan_get_status();
-	if (err < 0)
-		goto out;
-
-	err = fan_last_level;
-out:
 	mutex_unlock(&fan_lock);
 	return err;
 }
 
 static int qc71_fan_set_mode(u8 mode)
 {
-	int err = mutex_lock_interruptible(&fan_lock);
+	int err = mutex_lock_interruptible(&fan_lock), oldpwm;
 	if (err)
 		return err;
 
 	switch (mode) {
 	case 0:
 		err = ec_write_byte(FAN_CTRL_ADDR, FAN_CTRL_FAN_BOOST);
+		if (err)
+			goto out;
+
+		err = qc71_fan_set_pwm(FAN_MAX_PWM);
 		break;
 	case 1:
-		err = qc71_fan_set_level_core(fan_last_level);
+		oldpwm = err = qc71_fan_get_pwm();
+		if (err < 0)
+			goto out;
+
+		err = ec_write_byte(FAN_CTRL_ADDR, FAN_CTRL_FAN_BOOST);
+		if (err < 0)
+			goto out;
+
+		err = qc71_fan_set_pwm(oldpwm);
+		if (err < 0)
+			ec_write_byte(FAN_CTRL_ADDR, 0x80 | FAN_CTRL_AUTO);
+
 		break;
 	case 2:
-		err = ec_write_byte(FAN_CTRL_ADDR, 0xA0);
+		err = ec_write_byte(FAN_CTRL_ADDR, 0x80 | FAN_CTRL_AUTO);
 		break;
 	default:
 		err = -EINVAL;
 		break;
 	}
 
+out:
 	mutex_unlock(&fan_lock);
 	return err;
 }
@@ -874,6 +854,27 @@ static const struct qc71_debugfs_attr {
 	{"pwr_status",       POWER_STATUS_ADDR},
 	{"trigger_1",        TRIGGER_1_ADDR},
 	{"trigger_2",        TRIGGER_2_ADDR},
+	{"fan_pwm_1",        FAN_PWM_1_ADDR},
+	{"fan_pwm_2",        FAN_PWM_2_ADDR},
+
+	/* these don't seem to work */
+	{"fan_l1_pwm",       ADDR(0x07, 0x43)},
+	{"fan_l2_pwm",       ADDR(0x07, 0x44)},
+	{"fan_l3_pwm",       ADDR(0x07, 0x45)},
+	/* seemingly there is another level here, fan_ctrl=0x84, pwm=0x5a */
+	{"fan_l4_pwm",       ADDR(0x07, 0x46)},
+	{"fan_l5_pwm",       ADDR(0x07, 0x47)}, /* this is seemingly ignored, fan_ctrl=0x86, pwm=0xb4 */
+
+	{"fan_l1_pwm_default", ADDR(0x07, 0x86)},
+	{"fan_l2_pwm_default", ADDR(0x07, 0x87)},
+	{"fan_l3_pwm_default", ADDR(0x07, 0x88)},
+	{"fan_l4_pwm_default", ADDR(0x07, 0x89)},
+	{"fan_l5_pwm_default", ADDR(0x07, 0x8A)},
+
+	/* these don't seem to work */
+	{"fan_min_speed",   1950},
+	{"fan_min_temp",    1951},
+	{"fan_extra_speed", 1952},
 };
 
 static int get_debugfs_byte(void *data, u64 *value)
@@ -1101,11 +1102,12 @@ static int qc71_hwmon_write(struct device *device, enum hwmon_sensor_types type,
 static ssize_t fan_pwm1_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
-	int res = qc71_fan_get_level();
+	int res = qc71_fan_get_pwm();
+
 	if (res < 0)
 		return res;
 
-	return sprintf(buf, "%d\n", res * 255 / 7);
+	return sprintf(buf, "%d\n", res * U8_MAX / FAN_MAX_PWM);
 }
 
 static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
@@ -1117,10 +1119,10 @@ static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
 	if (kstrtouint(buf, 10, &value))
 		return -EINVAL;
 
-	if (value > 255)
+	if (value > U8_MAX)
 		return -EINVAL;
 
-	err = qc71_fan_set_level(value / 32);
+	err = qc71_fan_set_pwm(value * FAN_MAX_PWM / U8_MAX);
 	if (err)
 		return err;
 
