@@ -148,7 +148,7 @@ static const u8 lightbar_pwm_to_level[][256] = {
 
 #endif
 
-#define HWMON_BATTERY
+//#define HWMON_BATTERY
 
 /*
  * EC register addresses and bitmasks,
@@ -248,6 +248,10 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE BIT(5)
 #define BIOS_CTRL_3_FAN_ALWAYS_ON          BIT(6)
 
+#define PL1_ADDR ADDR(0x07, 0x83)
+#define PL2_ADDR ADDR(0x07, 0x84)
+#define PL4_ADDR ADDR(0x07, 0x85)
+
 union qc71_ec_result {
 	u32 dword;
 	struct {
@@ -322,7 +326,7 @@ MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs (default=fal
 /* ========================================================================== */
 /* EC access */
 
-static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result, bool read)
+static int __must_check qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result, bool read)
 {
 	u8 buf[] = {
 		addr & 0xFF,
@@ -342,7 +346,7 @@ static int qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result,
 	struct acpi_buffer input = { (acpi_size) sizeof(buf), buf },
 			   output = { (acpi_size) sizeof(outbuf_buf), outbuf_buf };
 	union acpi_object *obj;
-	acpi_status status;
+	acpi_status status = AE_OK;
 
 	int err = mutex_lock_interruptible(&ec_lock);
 
@@ -380,22 +384,22 @@ out:
 }
 ALLOW_ERROR_INJECTION(qc71_ec_transaction, ERRNO);
 
-static int qc71_ec_read(u16 addr, union qc71_ec_result *result)
+static int __must_check qc71_ec_read(u16 addr, union qc71_ec_result *result)
 {
 	return qc71_ec_transaction(addr, 0, result, true);
 }
 
-static int qc71_ec_write(u16 addr, u16 data)
+static int __must_check qc71_ec_write(u16 addr, u16 data)
 {
 	return qc71_ec_transaction(addr, data, NULL, false);
 }
 
-static inline int ec_write_byte(u16 addr, u8 data)
+static inline int __must_check ec_write_byte(u16 addr, u8 data)
 {
 	return qc71_ec_write(addr, data);
 }
 
-static inline int ec_read_byte(u16 addr)
+static inline int __must_check ec_read_byte(u16 addr)
 {
 	int err;
 	union qc71_ec_result result;
@@ -535,7 +539,7 @@ static int qc71_fan_set_mode(u8 mode)
 
 		err = qc71_fan_set_pwm(oldpwm);
 		if (err < 0)
-			ec_write_byte(FAN_CTRL_ADDR, 0x80 | FAN_CTRL_AUTO);
+			(void) ec_write_byte(FAN_CTRL_ADDR, 0x80 | FAN_CTRL_AUTO);
 
 		break;
 	case 2:
@@ -856,8 +860,11 @@ static const struct qc71_debugfs_attr {
 	{"trigger_2",        TRIGGER_2_ADDR},
 	{"fan_pwm_1",        FAN_PWM_1_ADDR},
 	{"fan_pwm_2",        FAN_PWM_2_ADDR},
+	{"pl_1",             PL1_ADDR},
+	{"pl_2",             PL2_ADDR},
+	{"pl_4",             PL4_ADDR},
 
-	/* these don't seem to work */
+	/* setting these don't seem to work */
 	{"fan_l1_pwm",       ADDR(0x07, 0x43)},
 	{"fan_l2_pwm",       ADDR(0x07, 0x44)},
 	{"fan_l3_pwm",       ADDR(0x07, 0x45)},
