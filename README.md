@@ -24,7 +24,8 @@ It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and wi
 ## Current
 * Integrate fan speeds into the Linux hardware monitoring subsyste (so that `lm_sensors` can pick it up)
 * Control the lightbar
-* Enable/disable passive cooling, reduced fan duty cycle, and Fn lock (BIOS 0114 and above)
+* Enable/disable always-on mode, reduced fan duty cycle (BIOS 0114 and above)
+* Fn lock (BIOS 0114 and above)
 * Change battery charge limit (BIOS 0114 and above)
 
 
@@ -159,9 +160,14 @@ will cause the fans to run at 25% of their capacity (about 2300 RPM) at idle (in
 
 ## Fn lock
 ```
+# echo 1 > /sys/devices/platform/qc71_laptop/fn_lock_switch
+```
+will enable changing the Fn lock state by pressing Fn+ESC. If this file contains `1`, then pressing Fn+ESC will toggle the Fn lock; if this file contains `0`, then pressing Fn+ESC will have no effect on the Fn lock.
+
+```
 # echo 1 > /sys/devices/platform/qc71_laptop/fn_lock
 ```
-will disable the Fn lock lock (you read that right), meaning that if you now press Fn+ESC, then the you enable the Fn lock, meaning you won't need to use Fn to access the secondary functions of the buttons in the top row. Pressing Fn+ESC turns the Fn lock off. Writing zero will enable the Fn lock lock. Fn+ESC has no effect if that file contains `0`.
+will directly enable the Fn lock. If this file contains `1`, then pressing the functions keys will trigger their secondary functions (mute, brightness up, etc.); if this file contains `0`, then pressing the functions keys will trigger their primary functions (F1, F2, ...).
 
 
 ## Battery charge limit

@@ -15,26 +15,34 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <dt-bindings/leds/common.h>
 #include <linux/power_supply.h>
 #include <acpi/battery.h>
 #include <linux/acpi.h>
 #include <linux/bits.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/error-injection.h>
 #include <linux/hwmon.h>
 #include <linux/init.h>
+#include <linux/input.h>
+#include <linux/input/sparse-keymap.h>
 #include <linux/kconfig.h>
 #include <linux/leds.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/rwsem.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/wmi.h>
 
 ACPI_MODULE_NAME(KBUILD_MODNAME)
+
+#define KBD_BL_LED_SUFFIX ":" LED_FUNCTION_KBD_BACKLIGHT
 
 /* ========================================================================== */
 
@@ -61,14 +69,15 @@ ACPI_MODULE_NAME(KBUILD_MODNAME)
 /* AcpiTest_EventPackage */
 #define QC71_WMI_EVENT2_GUID     "ABBC0F70-8EA1-11D1-00A0-C90629100000"
 
+static const char * const qc71_wmi_event_guids[] = {
+	QC71_WMI_EVENT0_GUID,
+	QC71_WMI_EVENT1_GUID,
+	QC71_WMI_EVENT2_GUID,
+};
+
 /* ========================================================================== */
 
-#define ADDR(page, offset)       (((u16)(page) << 8) | ((u16)(offset)))
-
-static const u16 qc71_fan_addrs[] = {
-	ADDR(0x04, 0x64),
-	ADDR(0x04, 0x6C),
-};
+#define ADDR(page, offset)       (((uint16_t)(page) << 8) | ((uint16_t)(offset)))
 
 enum qc71_lightbar_color {
 	LIGHTBAR_RED   = 0,
@@ -83,7 +92,7 @@ enum qc71_lightbar_color {
 #define LIGHTBAR_CTRL_RAINBOW   BIT(7)
 
 #if defined(CONFIG_LEDS_CLASS) || defined(CONFIG_DEBUG_FS)
-static const u16 lightbar_color_addrs[] = {
+static const uint16_t lightbar_color_addrs[] = {
 	[LIGHTBAR_RED]   = ADDR(0x07, 0x49),
 	[LIGHTBAR_GREEN] = ADDR(0x07, 0x4A),
 	[LIGHTBAR_BLUE]  = ADDR(0x07, 0x4B),
@@ -92,20 +101,20 @@ static const u16 lightbar_color_addrs[] = {
 
 #if IS_ENABLED(CONFIG_LEDS_CLASS)
 
-static const u8 lightbar_colors[] = {
+static const uint8_t lightbar_colors[] = {
 	LIGHTBAR_RED,
 	LIGHTBAR_GREEN,
 	LIGHTBAR_BLUE,
 };
 
-static const u8 lightbar_color_values[][10] = {
+static const uint8_t lightbar_color_values[][10] = {
 	[LIGHTBAR_RED]   = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 	[LIGHTBAR_GREEN] = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 	[LIGHTBAR_BLUE]  = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 };
 
 /* inverse of 'lightbar_color_values' */
-static const u8 lightbar_pwm_to_level[][256] = {
+static const uint8_t lightbar_pwm_to_level[][256] = {
 	[LIGHTBAR_RED] = {
 		 [0] = 0,
 		 [4] = 1,
@@ -148,7 +157,7 @@ static const u8 lightbar_pwm_to_level[][256] = {
 
 #endif
 
-//#define HWMON_BATTERY
+#define HWMON_EXTRA
 
 /*
  * EC register addresses and bitmasks,
@@ -167,9 +176,25 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define FAN_CTRL_FAN_BOOST    BIT(6)
 #define FAN_CTRL_LEVEL(level) (128 + (level))
 
+static const uint16_t qc71_fan_rpm_addrs[] = {
+	ADDR(0x04, 0x64),
+	ADDR(0x04, 0x6C),
+};
+
 #define FAN_PWM_1_ADDR ADDR(0x18, 0x04)
 #define FAN_PWM_2_ADDR ADDR(0x18, 0x09)
+
+static const uint16_t qc71_fan_pwm_addrs[] = {
+	FAN_PWM_1_ADDR,
+	FAN_PWM_2_ADDR,
+};
+
 #define FAN_MAX_PWM 200
+
+static const uint16_t qc71_fan_temp_addrs[] = {
+	ADDR(0x04, 0x3e),
+	ADDR(0x04, 0x4f),
+};
 
 #define FAN_MODE_INDEX_ADDR ADDR(0x07, 0xAB)
 #define FAN_MODE_INDEX_LOW_MASK GENMASK(3, 0)
@@ -197,7 +222,10 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define CTRL_4_ADDR                   ADDR(0x07, 0xA6)
 #define CTRL_4_OVERBOOST_DYN_TEMP_OFF BIT(1)
 
-#define SUPPORT_1_ADDR      ADDR(0x07, 0x65)
+#define SUPPORT_1_ADDR           ADDR(0x07, 0x65)
+#define SUPPORT_1_SUPER_KEY_LOCK BIT(5)
+#define SUPPORT_1_LIGHTBAR       BIT(6)
+#define SUPPORT_1_FAN_BOOST      BIT(7)
 
 #define SUPPORT_2_ADDR      ADDR(0x07, 0x66)
 
@@ -220,7 +248,7 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define PLATFORM_ID_ADDR  ADDR(0x04, 0x56)
 
 #define AP_BIOS_BYTE_ADDR ADDR(0x07, 0xA4)
-#define AP_BIOS_BYTE_FN_LOCK BIT(3)
+#define AP_BIOS_BYTE_FN_LOCK_SWITCH BIT(3)
 
 /* battery charger control register */
 #define BATT_CHARGE_CTRL_ADDR ADDR(0x07, 0xB9)
@@ -252,27 +280,39 @@ static const u8 lightbar_pwm_to_level[][256] = {
 #define PL2_ADDR ADDR(0x07, 0x84)
 #define PL4_ADDR ADDR(0x07, 0x85)
 
+#define DEVICE_STATUS_ADDR  ADDR(0x04, 0x7B)
+#define DEVICE_STATUS_WIFI_ON BIT(7)
+/*
+ * BIT(5) is also set/unset depending on the rfkill state,
+ * that's possibly for Bluetooth
+ */
+
 union qc71_ec_result {
-	u32 dword;
+	uint32_t dword;
 	struct {
-		u16 w1;
-		u16 w2;
+		uint16_t w1;
+		uint16_t w2;
 	} words;
 	struct {
-		u8 b1;
-		u8 b2;
-		u8 b3;
-		u8 b4;
+		uint8_t b1;
+		uint8_t b2;
+		uint8_t b3;
+		uint8_t b4;
 	} bytes;
 };
 
 static struct platform_device *qc71_platform_dev;
+
+static struct input_dev *qc71_input_dev;
 
 #if IS_ENABLED(CONFIG_HWMON)
 static struct device *qc71_hwmon_dev;
 #endif
 
 struct {
+	bool super_key_lock;
+	bool lightbar;
+	bool fan_boost;
 	bool fn_lock;
 	bool batt_charge_limit;
 	bool fan_extras; /* duty cycle reduction, always on mode */
@@ -326,9 +366,10 @@ MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs (default=fal
 /* ========================================================================== */
 /* EC access */
 
-static int __must_check qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_result *result, bool read)
+static int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
+					    union qc71_ec_result *result, bool read)
 {
-	u8 buf[] = {
+	uint8_t buf[] = {
 		addr & 0xFF,
 		addr >> 8,
 		data & 0xFF,
@@ -341,10 +382,10 @@ static int __must_check qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_re
 	static_assert(ARRAY_SIZE(buf) == 8);
 
 	/* the returned ACPI_TYPE_BUFFER is 40 bytes long for some reason ... */
-	u8 outbuf_buf[sizeof(union acpi_object) + 40];
+	uint8_t outbuf_buf[sizeof(union acpi_object) + 40];
 
-	struct acpi_buffer input = { (acpi_size) sizeof(buf), buf },
-			   output = { (acpi_size) sizeof(outbuf_buf), outbuf_buf };
+	struct acpi_buffer input = { sizeof(buf), buf },
+			   output = { sizeof(outbuf_buf), outbuf_buf };
 	union acpi_object *obj;
 	acpi_status status = AE_OK;
 
@@ -375,7 +416,7 @@ static int __must_check qc71_ec_transaction(u16 addr, u16 data, union qc71_ec_re
 	}
 
 out:
-	pr_debug("%s(addr=0x%04x, data=0x%04x, result=%s, read=%s): (%d) [%08lx] %s\n",
+	pr_debug("%s(addr=%#06x, data=%#06x, result=%s, read=%s): (%d) [%#010lx] %s\n",
 		 __func__, (unsigned int) addr, (unsigned int) data,
 		 result ? "wants" : "NULL", read ? "yes" : "no", err,
 		 (unsigned long) status, acpi_format_exception(status));
@@ -384,32 +425,32 @@ out:
 }
 ALLOW_ERROR_INJECTION(qc71_ec_transaction, ERRNO);
 
-static int __must_check qc71_ec_read(u16 addr, union qc71_ec_result *result)
+static inline int __must_check qc71_ec_read(uint16_t addr, union qc71_ec_result *result)
 {
 	return qc71_ec_transaction(addr, 0, result, true);
 }
 
-static int __must_check qc71_ec_write(u16 addr, u16 data)
+static inline int __must_check qc71_ec_write(uint16_t addr, uint16_t data)
 {
 	return qc71_ec_transaction(addr, data, NULL, false);
 }
 
-static inline int __must_check ec_write_byte(u16 addr, u8 data)
+static inline int __must_check ec_write_byte(uint16_t addr, uint8_t data)
 {
 	return qc71_ec_write(addr, data);
 }
 
-static inline int __must_check ec_read_byte(u16 addr)
+static int __must_check ec_read_byte(uint16_t addr)
 {
-	int err;
 	union qc71_ec_result result;
+	int err;
 
 	err = qc71_ec_read(addr, &result);
 
 	if (err)
 		return err;
 
-	pr_debug("%s(addr=0x%04x): %02x %02x %02x %02x\n",
+	pr_debug("%s(addr=%#06x): %#04x %#04x %#04x %#04x\n",
 		 __func__, (unsigned int) addr, result.bytes.b1,
 		 result.bytes.b2, result.bytes.b3, result.bytes.b4);
 
@@ -417,19 +458,32 @@ static inline int __must_check ec_read_byte(u16 addr)
 }
 
 /* ========================================================================== */
+/* rfkill */
+
+static int qc71_rfkill_get_state(void)
+{
+	int err = ec_read_byte(DEVICE_STATUS_ADDR);
+
+	if (err < 0)
+		return err;
+
+	return !!(err & DEVICE_STATUS_WIFI_ON);
+}
+
+/* ========================================================================== */
 /* fan */
 
 #if IS_ENABLED(CONFIG_HWMON)
 
-static int qc71_fan_get_rpm(u8 fan_index)
+static int qc71_fan_get_rpm(uint8_t fan_index)
 {
 	union qc71_ec_result res;
 	int err;
 
-	if (fan_index >= ARRAY_SIZE(qc71_fan_addrs))
+	if (fan_index >= ARRAY_SIZE(qc71_fan_rpm_addrs))
 		return -EINVAL;
 
-	err = qc71_ec_read(qc71_fan_addrs[fan_index], &res);
+	err = qc71_ec_read(qc71_fan_rpm_addrs[fan_index], &res);
 
 	if (err)
 		return err;
@@ -452,17 +506,31 @@ static int qc71_fan_get_status(void)
 	return ec_read_byte(FAN_CTRL_ADDR);
 }
 
-static int qc71_fan_get_pwm(void)
+static int qc71_fan_get_pwm(uint8_t fan_index)
 {
-	return ec_read_byte(FAN_PWM_1_ADDR);
+	if (fan_index >= ARRAY_SIZE(qc71_fan_pwm_addrs))
+		return -EINVAL;
+
+	return ec_read_byte(qc71_fan_pwm_addrs[fan_index]);
 }
 
-static int qc71_fan_set_pwm(u8 pwm)
+static int qc71_fan_set_pwm(uint8_t fan_index, uint8_t pwm)
 {
+	if (fan_index >= ARRAY_SIZE(qc71_fan_pwm_addrs))
+		return -EINVAL;
+
 	if (pwm > FAN_MAX_PWM)
 		return -EINVAL;
 
-	return ec_write_byte(FAN_PWM_1_ADDR, pwm);
+	return ec_write_byte(qc71_fan_pwm_addrs[fan_index], pwm);
+}
+
+static int qc71_fan_get_temp(uint8_t fan_index)
+{
+	if (fan_index >= ARRAY_SIZE(qc71_fan_temp_addrs))
+		return -EINVAL;
+
+	return ec_read_byte(qc71_fan_temp_addrs[fan_index]);
 }
 
 /* 'fan_lock' must be held */
@@ -479,7 +547,7 @@ static int qc71_fan_get_mode_core(void)
 			return err;
 
 		if (err & FAN_CTRL_FAN_BOOST) {
-			err = qc71_fan_get_pwm();
+			err = qc71_fan_get_pwm(0);
 
 			if (err < 0)
 				return err;
@@ -490,9 +558,9 @@ static int qc71_fan_get_mode_core(void)
 				err = 1; /* manual */
 
 		} else if (err & FAN_CTRL_AUTO) {
-			err = 1; /* manual */
-		} else {
 			err = 2; /* automatic fan control */
+		} else {
+			err = 1; /* manual */
 		}
 	} else {
 		err = 2; /* automatic fan control */
@@ -514,9 +582,10 @@ static int qc71_fan_get_mode(void)
 	return err;
 }
 
-static int qc71_fan_set_mode(u8 mode)
+static int qc71_fan_set_mode(uint8_t mode)
 {
 	int err = mutex_lock_interruptible(&fan_lock), oldpwm;
+
 	if (err)
 		return err;
 
@@ -526,10 +595,10 @@ static int qc71_fan_set_mode(u8 mode)
 		if (err)
 			goto out;
 
-		err = qc71_fan_set_pwm(FAN_MAX_PWM);
+		err = qc71_fan_set_pwm(0, FAN_MAX_PWM);
 		break;
 	case 1:
-		oldpwm = err = qc71_fan_get_pwm();
+		oldpwm = err = qc71_fan_get_pwm(0);
 		if (err < 0)
 			goto out;
 
@@ -537,9 +606,10 @@ static int qc71_fan_set_mode(u8 mode)
 		if (err < 0)
 			goto out;
 
-		err = qc71_fan_set_pwm(oldpwm);
+		err = qc71_fan_set_pwm(0, oldpwm);
 		if (err < 0)
 			(void) ec_write_byte(FAN_CTRL_ADDR, 0x80 | FAN_CTRL_AUTO);
+			/* try to restore automatic fan control */
 
 		break;
 	case 2:
@@ -567,12 +637,12 @@ static int qc71_lightbar_get_status(void)
 	return ec_read_byte(LIGHTBAR_CONTROL_ADDR);
 }
 
-static int qc71_lightbar_write_ctrl(u8 ctrl)
+static int qc71_lightbar_write_ctrl(uint8_t ctrl)
 {
 	return ec_write_byte(LIGHTBAR_CONTROL_ADDR, ctrl);
 }
 
-static int qc71_lightbar_switch(u8 mask, bool on)
+static int qc71_lightbar_switch(uint8_t mask, bool on)
 {
 	int status;
 
@@ -587,7 +657,7 @@ static int qc71_lightbar_switch(u8 mask, bool on)
 	return qc71_lightbar_write_ctrl(SET_BIT(status, mask, !on));
 }
 
-static int qc71_lightbar_set_color_level(u8 color, u8 level)
+static int qc71_lightbar_set_color_level(uint8_t color, uint8_t level)
 {
 	if (color >= ARRAY_SIZE(lightbar_color_addrs))
 		return -EINVAL;
@@ -598,7 +668,7 @@ static int qc71_lightbar_set_color_level(u8 color, u8 level)
 	return ec_write_byte(lightbar_color_addrs[color], lightbar_color_values[color][level]);
 }
 
-static int qc71_lightbar_get_color_level(u8 color)
+static int qc71_lightbar_get_color_level(uint8_t color)
 {
 	int err;
 
@@ -636,6 +706,28 @@ static int qc71_lightbar_set_color(unsigned int color)
 }
 
 #endif
+
+static int qc71_fn_lock_get_state(void)
+{
+	int status = ec_read_byte(BIOS_CTRL_1_ADDR);
+
+	if (status < 0)
+		return status;
+
+	return !!(status & BIOS_CTRL_1_FN_LOCK_STATUS);
+}
+
+static int qc71_fn_lock_set_state(bool state)
+{
+	int status = ec_read_byte(BIOS_CTRL_1_ADDR);
+
+	if (status < 0)
+		return status;
+
+	status = SET_BIT(status, BIOS_CTRL_1_FN_LOCK_STATUS, state);
+
+	return ec_write_byte(BIOS_CTRL_1_ADDR, status);
+}
 
 /* ========================================================================== */
 /* platform device attrs */
@@ -711,12 +803,12 @@ static ssize_t fan_always_on_store(struct device *dev, struct device_attribute *
 static ssize_t fn_lock_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
-	int status = ec_read_byte(AP_BIOS_BYTE_ADDR);
+	int status = qc71_fn_lock_get_state();
 
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & AP_BIOS_BYTE_FN_LOCK));
+	return sprintf(buf, "%d\n", status);
 }
 
 static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
@@ -728,11 +820,38 @@ static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
 	if (kstrtobool(buf, &value))
 		return -EINVAL;
 
+	status = qc71_fn_lock_set_state(value);
+	if (status < 0)
+		return status;
+
+	return count;
+}
+
+static ssize_t fn_lock_switch_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	int status = ec_read_byte(AP_BIOS_BYTE_ADDR);
+
+	if (status < 0)
+		return status;
+
+	return sprintf(buf, "%d\n", (int) !!(status & AP_BIOS_BYTE_FN_LOCK_SWITCH));
+}
+
+static ssize_t fn_lock_switch_store(struct device *dev, struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	int status;
+	bool value;
+
+	if (kstrtobool(buf, &value))
+		return -EINVAL;
+
 	status = ec_read_byte(AP_BIOS_BYTE_ADDR);
 	if (status < 0)
 		return status;
 
-	status = SET_BIT(status, AP_BIOS_BYTE_FN_LOCK, value);
+	status = SET_BIT(status, AP_BIOS_BYTE_FN_LOCK_SWITCH, value);
 
 	status = ec_write_byte(AP_BIOS_BYTE_ADDR, status);
 
@@ -810,13 +929,17 @@ static ssize_t super_key_lock_store(struct device *dev, struct device_attribute 
 	return count;
 }
 
+enum { DEV_ATTRS_START_LINE = __LINE__ };
 static DEVICE_ATTR_RW(fn_lock);
+static DEVICE_ATTR_RW(fn_lock_switch);
 static DEVICE_ATTR_RW(fan_always_on);
 static DEVICE_ATTR_RW(fan_reduced_duty_cycle);
 static DEVICE_ATTR_RW(manual_control);
 static DEVICE_ATTR_RW(super_key_lock);
+enum { DEV_ATTRS_END_LINE = __LINE__ };
 
-static struct attribute *qc71_laptop_attrs[6];
+/* -1 is not needed because of the NULL terminator */
+static struct attribute *qc71_laptop_attrs[DEV_ATTRS_END_LINE - DEV_ATTRS_START_LINE];
 ATTRIBUTE_GROUPS(qc71_laptop);
 
 /* ========================================================================== */
@@ -826,9 +949,10 @@ ATTRIBUTE_GROUPS(qc71_laptop);
 
 static const struct qc71_debugfs_attr {
 	const char *name;
-	u16 addr;
+	uint16_t addr;
 } qc71_debugfs_attrs[] = {
 	{"ap_bios_byte",     AP_BIOS_BYTE_ADDR},
+
 	{"batt_alert",       BATT_ALERT_ADDR},
 	{"batt_charge_ctrl", BATT_CHARGE_CTRL_ADDR},
 	{"batt_status",      BATT_STATUS_ADDR},
@@ -838,31 +962,20 @@ static const struct qc71_debugfs_attr {
 	{"bios_ctrl_3",      BIOS_CTRL_3_ADDR},
 	{"bios_info_1",      BIOS_INFO_1_ADDR},
 	{"bios_info_5",      BIOS_INFO_5_ADDR},
+
 	{"ctrl_1",           CTRL_1_ADDR},
 	{"ctrl_2",           CTRL_2_ADDR},
 	{"ctrl_3",           CTRL_3_ADDR},
 	{"ctrl_4",           CTRL_4_ADDR},
+
+	{"device_status",    DEVICE_STATUS_ADDR},
+
 	{"fan_ctrl",         FAN_CTRL_ADDR},
 	{"fan_mode_index",   FAN_MODE_INDEX_ADDR},
-	{"lightbar_ctrl",    LIGHTBAR_CONTROL_ADDR},
-	{"lightbar_red",     lightbar_color_addrs[LIGHTBAR_RED]},
-	{"lightbar_green",   lightbar_color_addrs[LIGHTBAR_GREEN]},
-	{"lightbar_blue",    lightbar_color_addrs[LIGHTBAR_BLUE]},
-	{"support_1",        SUPPORT_1_ADDR},
-	{"support_2",        SUPPORT_2_ADDR},
-	{"support_5",        SUPPORT_5_ADDR},
-	{"status_1",         STATUS_1_ADDR},
-	{"platform_id",      PLATFORM_ID_ADDR},
-	{"power_source",     POWER_SOURCE_ADDR},
-	{"project_id",       PROJ_ID_ADDR},
-	{"pwr_status",       POWER_STATUS_ADDR},
-	{"trigger_1",        TRIGGER_1_ADDR},
-	{"trigger_2",        TRIGGER_2_ADDR},
-	{"fan_pwm_1",        FAN_PWM_1_ADDR},
-	{"fan_pwm_2",        FAN_PWM_2_ADDR},
-	{"pl_1",             PL1_ADDR},
-	{"pl_2",             PL2_ADDR},
-	{"pl_4",             PL4_ADDR},
+	{"fan_temp_1",       qc71_fan_temp_addrs[0]},
+	{"fan_temp_2",       qc71_fan_temp_addrs[1]},
+	{"fan_pwm_1",        qc71_fan_pwm_addrs[0]},
+	{"fan_pwm_2",        qc71_fan_pwm_addrs[1]},
 
 	/* setting these don't seem to work */
 	{"fan_l1_pwm",       ADDR(0x07, 0x43)},
@@ -882,6 +995,27 @@ static const struct qc71_debugfs_attr {
 	{"fan_min_speed",   1950},
 	{"fan_min_temp",    1951},
 	{"fan_extra_speed", 1952},
+
+	{"lightbar_ctrl",    LIGHTBAR_CONTROL_ADDR},
+	{"lightbar_red",     lightbar_color_addrs[LIGHTBAR_RED]},
+	{"lightbar_green",   lightbar_color_addrs[LIGHTBAR_GREEN]},
+	{"lightbar_blue",    lightbar_color_addrs[LIGHTBAR_BLUE]},
+
+	{"support_1",        SUPPORT_1_ADDR},
+	{"support_2",        SUPPORT_2_ADDR},
+	{"support_5",        SUPPORT_5_ADDR},
+	{"status_1",         STATUS_1_ADDR},
+
+	{"platform_id",      PLATFORM_ID_ADDR},
+	{"power_source",     POWER_SOURCE_ADDR},
+	{"project_id",       PROJ_ID_ADDR},
+	{"power_status",     POWER_STATUS_ADDR},
+	{"pl_1",             PL1_ADDR},
+	{"pl_2",             PL2_ADDR},
+	{"pl_4",             PL4_ADDR},
+
+	{"trigger_1",        TRIGGER_1_ADDR},
+	{"trigger_2",        TRIGGER_2_ADDR},
 };
 
 static int get_debugfs_byte(void *data, u64 *value)
@@ -905,7 +1039,7 @@ static int set_debugfs_byte(void *data, u64 value)
 	if (value > U8_MAX)
 		return -EINVAL;
 
-	status = ec_write_byte(attr->addr, (u8) value);
+	status = ec_write_byte(attr->addr, (uint8_t) value);
 
 	if (status < 0)
 		return status;
@@ -913,7 +1047,7 @@ static int set_debugfs_byte(void *data, u64 value)
 	return status;
 }
 
-DEFINE_DEBUGFS_ATTRIBUTE(qc71_debugfs_fops, get_debugfs_byte, set_debugfs_byte, "0x%02llx\n");
+DEFINE_DEBUGFS_ATTRIBUTE(qc71_debugfs_fops, get_debugfs_byte, set_debugfs_byte, "%#04llx\n");
 
 #endif
 
@@ -1021,7 +1155,7 @@ static umode_t qc71_hwmon_is_visible(const void *data, enum hwmon_sensor_types t
 			break;
 		}
 		break;
-#ifdef HWMON_BATTERY
+#ifdef HWMON_EXTRA
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_input:
@@ -1075,15 +1209,28 @@ static int qc71_hwmon_read(struct device *device, enum hwmon_sensor_types type,
 			break;
 		}
 		break;
-#ifdef HWMON_BATTERY
+#ifdef HWMON_EXTRA
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_input:
-			err = ec_read_byte(BATT_TEMP_ADDR);
-			if (err < 0)
-				return err;
+			switch (channel) {
+			case 0:
+			case 1:
+				err = qc71_fan_get_temp(channel);
+				if (err < 0)
+					return err;
+				*value = err * 1000;
+				break;
+			case 2:
+				err = ec_read_byte(BATT_TEMP_ADDR);
+				if (err < 0)
+					return err;
+				*value = err * 100;
+				break;
+			default:
+				return -EOPNOTSUPP;
+			}
 
-			*value = err * 100;
 			break;
 		default:
 			return -EOPNOTSUPP;
@@ -1106,10 +1253,9 @@ static int qc71_hwmon_write(struct device *device, enum hwmon_sensor_types type,
 	return qc71_fan_set_mode(value);
 }
 
-static ssize_t fan_pwm1_show(struct device *dev,
-			     struct device_attribute *attr, char *buf)
+static ssize_t fan_pwm_show(uint8_t fan_index, char *buf)
 {
-	int res = qc71_fan_get_pwm();
+	int res = qc71_fan_get_pwm(fan_index);
 
 	if (res < 0)
 		return res;
@@ -1117,8 +1263,7 @@ static ssize_t fan_pwm1_show(struct device *dev,
 	return sprintf(buf, "%d\n", res * U8_MAX / FAN_MAX_PWM);
 }
 
-static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
-			      const char *buf, size_t count)
+static ssize_t fan_pwm_store(uint8_t fan_index, const char *buf, size_t count)
 {
 	unsigned int value;
 	int err;
@@ -1129,14 +1274,32 @@ static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
 	if (value > U8_MAX)
 		return -EINVAL;
 
-	err = qc71_fan_set_pwm(value * FAN_MAX_PWM / U8_MAX);
+	err = qc71_fan_set_pwm(fan_index, value * FAN_MAX_PWM / U8_MAX);
 	if (err)
 		return err;
 
 	return count;
 }
 
-#ifdef HWMON_BATTERY
+static ssize_t fan_pwm1_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	return fan_pwm_show(0, buf);
+}
+
+static ssize_t fan_pwm1_store(struct device *dev, struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	return fan_pwm_store(0, buf, count);
+}
+
+static ssize_t fan_pwm2_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	return fan_pwm_show(1, buf);
+}
+
+#ifdef HWMON_EXTRA
 static int qc71_hwmon_read_string(struct device *dev, enum hwmon_sensor_types type,
 				  u32 attr, int channel, const char **str)
 {
@@ -1144,7 +1307,19 @@ static int qc71_hwmon_read_string(struct device *dev, enum hwmon_sensor_types ty
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_label:
-			*str = "battery";
+			switch (channel) {
+			case 0:
+				*str = "fan1_temp";
+				break;
+			case 1:
+				*str = "fan2_temp";
+				break;
+			case 2:
+				*str = "battery";
+				break;
+			default:
+				return -EOPNOTSUPP;
+			}
 			break;
 		default:
 			return -EOPNOTSUPP;
@@ -1164,8 +1339,10 @@ static const struct hwmon_channel_info *qc71_hwmon_ch_info[] = {
 			   HWMON_F_INPUT | HWMON_F_FAULT),
 	HWMON_CHANNEL_INFO(pwm,
 			   HWMON_PWM_ENABLE),
-#ifdef HWMON_BATTERY
+#ifdef HWMON_EXTRA
 	HWMON_CHANNEL_INFO(temp,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 #endif
 	NULL
@@ -1175,7 +1352,7 @@ static struct hwmon_ops qc71_hwmon_ops = {
 	.is_visible  = qc71_hwmon_is_visible,
 	.read        = qc71_hwmon_read,
 	.write       = qc71_hwmon_write,
-#ifdef HWMON_BATTERY
+#ifdef HWMON_EXTRA
 	.read_string = qc71_hwmon_read_string,
 #endif
 };
@@ -1186,9 +1363,12 @@ static struct hwmon_chip_info qc71_hwmon_chip_info = {
 };
 
 static DEVICE_ATTR(pwm1, 0644, fan_pwm1_show, fan_pwm1_store);
+static DEVICE_ATTR(pwm2, 0444, fan_pwm2_show, NULL);
+/* the two fans seem to be linked to pwm1, changing pwm2 has no effect */
 
 static struct attribute *qc71_hwmon_attrs[] = {
 	&dev_attr_pwm1.attr,
+	&dev_attr_pwm2.attr,
 	NULL
 };
 
@@ -1334,13 +1514,111 @@ static struct led_classdev qc71_lightbar_led = {
 #endif
 
 /* ========================================================================== */
+
+static void toggle_fn_lock_from_event_handler(void)
+{
+	int status = qc71_fn_lock_get_state();
+
+	if (status < 0)
+		return;
+
+	/* seemingly the returned status in the WMI event handler is not the current */
+	pr_info("setting Fn lock state from %d to %d\n", !status, status);
+	qc71_fn_lock_set_state(status);
+}
+
+#if IS_ENABLED(CONFIG_LEDS_BRIGHTNESS_HW_CHANGED)
+extern struct rw_semaphore leds_list_lock;
+extern struct list_head leds_list;
+
+static void emit_keyboard_led_hw_changed(void)
+{
+	struct list_head *node;
+
+	if (down_read_killable(&leds_list_lock))
+		return;
+
+	list_for_each(node, &leds_list) {
+		struct led_classdev *led = container_of(node, struct led_classdev, node);
+		size_t name_length;
+		const char *suffix;
+
+		if (!(led->flags & LED_BRIGHT_HW_CHANGED))
+			continue;
+
+		name_length = strlen(led->name);
+
+		if (name_length < strlen(KBD_BL_LED_SUFFIX))
+			continue;
+
+		suffix = led->name + name_length - strlen(KBD_BL_LED_SUFFIX);
+
+		if (strcmp(suffix, KBD_BL_LED_SUFFIX) == 0) {
+			int s;
+
+			if (mutex_lock_interruptible(&led->led_access))
+				break;
+
+			s = led_update_brightness(led);
+			if (s >= 0)
+				led_classdev_notify_brightness_hw_changed(led, led->brightness);
+
+			mutex_unlock(&led->led_access);
+			break;
+		}
+	}
+
+	up_read(&leds_list_lock);
+}
+#else
+static inline void emit_keyboard_led_hw_changed()
+{
+
+}
+#endif
+
+/* ========================================================================== */
 /* WMI events */
 /* for debugging */
+
+static const struct key_entry qc71_wmi_hotkeys[] = {
+
+	/* reported via keyboard controller */
+	{ KE_IGNORE, 0x01, { KEY_CAPSLOCK }},
+	{ KE_IGNORE, 0x02, { KEY_NUMLOCK }},
+	{ KE_IGNORE, 0x03, { KEY_SCROLLLOCK }},
+
+	/* reported via "video bus" */
+	{ KE_IGNORE, 0x14, { KEY_BRIGHTNESSUP }},
+	{ KE_IGNORE, 0x15, { KEY_BRIGHTNESSDOWN }},
+
+	/* reported in automatic mode when rfkill state changes */
+	{ KE_SW,     0x1a, {.sw = { SW_RFKILL_ALL, 1 }}},
+	{ KE_SW,     0x1b, {.sw = { SW_RFKILL_ALL, 0 }}},
+
+	/* reported via keyboard controller */
+	{ KE_IGNORE, 0x35, { KEY_MUTE }},
+	{ KE_IGNORE, 0x36, { KEY_VOLUMEDOWN }},
+	{ KE_IGNORE, 0x37, { KEY_VOLUMEUP }},
+
+	/*
+	 * not reported by other means when in manual mode,
+	 * handled automatically when it automatic mode
+	 */
+	{ KE_KEY,    0xa4, { KEY_RFKILL }},
+	{ KE_KEY,    0xb1, { KEY_KBDILLUMDOWN }},
+	{ KE_KEY,    0xb2, { KEY_KBDILLUMUP }},
+
+	{ KE_END }
+
+};
 
 static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 {
 	if (!obj || obj->type != ACPI_TYPE_INTEGER)
 		return;
+
+	sparse_keymap_report_event(qc71_input_dev, obj->integer.value, 1, true);
 
 	switch (obj->integer.value) {
 	/* caps lock */
@@ -1358,6 +1636,16 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 		pr_info("scroll lock\n");
 		break;
 
+	/* touchpad on */
+	case 4:
+		pr_info("touchpad on\n");
+		break;
+
+	/* touchpad off */
+	case 5:
+		pr_info("touchpad off\n");
+		break;
+
 	/* increase screen brightness */
 	case 20:
 		pr_info("increase screen brightness\n");
@@ -1370,11 +1658,13 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 
 	/* radio on */
 	case 26:
+		/* triggered in automatic mode when the rfkill hotkey is pressed */
 		pr_info("radio on\n");
 		break;
 
 	/* radio off */
 	case 27:
+		/* triggered in automatic mode when the rfkill hotkey is pressed */
 		pr_info("radio off\n");
 		break;
 
@@ -1439,25 +1729,35 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 	/* perf mode button pressed */
 	case 176:
 		pr_info("change perf mode\n");
+		/* TODO: should it be handled here? */
 		break;
 
 	/* increase keyboard backlight */
 	case 177:
 		pr_info("keyboard backlight decrease\n");
+		/* TODO: should it be handled here? */
 		break;
 
 	/* decrease keyboard backlight */
 	case 178:
 		pr_info("keyboard backlight increase\n");
+		/* TODO: should it be handled here? */
+		break;
+
+	/* toggle Fn lock (Fn+ESC)*/
+	case 184:
+		pr_info("toggle Fn lock\n");
+		toggle_fn_lock_from_event_handler();
 		break;
 
 	/* keyboard backlight brightness changed */
 	case 240:
 		pr_info("keyboard backlight changed\n");
+		emit_keyboard_led_hw_changed();
 		break;
 
 	default:
-		pr_info("unknown code: %u\n", (unsigned int) obj->integer.value);
+		pr_warn("unknown code: %u\n", (unsigned int) obj->integer.value);
 		break;
 	}
 }
@@ -1468,11 +1768,11 @@ static void qc71_wmi_event_handler(u32 value, void *context)
 	union acpi_object *obj;
 	acpi_status status;
 
-	pr_info("%s(value=0x%02X) called\n", __func__, (unsigned int) value);
+	pr_info("%s(value=%#04x) called\n", __func__, (unsigned int) value);
 	status = wmi_get_event_data(value, &response);
 
 	if (status != AE_OK) {
-		pr_err("bad WMI event status 0x%08x\n", (unsigned int) status);
+		pr_err("bad WMI event status %#010x\n", (unsigned int) status);
 		return;
 	}
 
@@ -1485,21 +1785,21 @@ static void qc71_wmi_event_handler(u32 value, void *context)
 		} else if (obj->type == ACPI_TYPE_STRING) {
 			pr_info("string = '%s'\n", obj->string.pointer);
 		} else if (obj->type == ACPI_TYPE_BUFFER) {
-			u32 i;
+			uint32_t i;
 
 			for (i = 0; i < obj->buffer.length; i++)
-				pr_info("buf[%u] = 0x%02X\n",
+				pr_info("buf[%u] = %#04x\n",
 					(unsigned int) i,
 					(unsigned int) obj->buffer.pointer[i]);
 		}
 	}
 
 	switch (value) {
-	case 0xD2:
+	case 0xd2:
 		qc71_wmi_event_d2_handler(obj);
 		break;
-	case 0xD1:
-	case 0xD0:
+	case 0xd1:
+	case 0xd0:
 		break;
 	}
 
@@ -1536,19 +1836,19 @@ struct oem_string_walker_data {
 static void __init oem_string_walker(const struct dmi_header *dm, void *ptr)
 {
 	int i, count;
-	const u8 *s;
+	const uint8_t *s;
 	struct oem_string_walker_data *data = ptr;
 
 	if (dm->type != 11 || dm->length < 5 || !IS_ERR_OR_NULL(data->value))
 		return;
 
-	count = *(u8 *)(dm + 1);
+	count = *(uint8_t *)(dm + 1);
 
 	if (data->index >= count)
 		return;
 
 	i = 0;
-	s = ((u8 *)dm) + dm->length;
+	s = ((uint8_t *)dm) + dm->length;
 
 	while (i++ < data->index && *s)
 		s += strlen(s) + 1;
@@ -1578,10 +1878,10 @@ static char * __init read_oem_string(int index)
 /* setup */
 
 /* QCCFL357.0062.2020.0313.1530 -> 62 */
-static inline int __pure __init parse_bios_version(const char *str)
+static int __pure __init parse_bios_version(const char *str)
 {
-	int bios_version;
 	const char *p = strchr(str, '.'), *p2;
+	int bios_version;
 
 	if (!p)
 		return -EINVAL;
@@ -1606,20 +1906,41 @@ static inline int __pure __init parse_bios_version(const char *str)
 	return bios_version;
 }
 
-static int __init check_features(void)
+static int __init check_features_ec(void)
 {
-	int bios_version;
-	const char *bios_version_str = dmi_get_system_info(DMI_BIOS_VERSION);
+	int err = ec_read_byte(SUPPORT_1_ADDR);
 
-	if (!bios_version_str)
+	if (err >= 0) {
+		features.super_key_lock = !!(err & SUPPORT_1_SUPER_KEY_LOCK);
+		features.lightbar       = !!(err & SUPPORT_1_LIGHTBAR);
+		features.fan_boost      = !!(err & SUPPORT_1_FAN_BOOST);
+	} else {
+		pr_warn("failed to query support_1 byte: %d\n", err);
+	}
+
+	return err;
+}
+
+static int __init check_features_bios(void)
+{
+	const char *bios_version_str;
+	int bios_version;
+
+	bios_version_str = dmi_get_system_info(DMI_BIOS_VERSION);
+
+	if (!bios_version_str) {
+		pr_warn("failed to get BIOS version DMI string\n");
 		return -ENOENT;
+	}
 
 	pr_info("BIOS version string: '%s'\n", bios_version_str);
 
 	bios_version = parse_bios_version(bios_version_str);
 
-	if (bios_version < 0)
+	if (bios_version < 0) {
+		pr_warn("cannot parse BIOS version\n");
 		return -EINVAL;
+	}
 
 	pr_info("BIOS version: %04d\n", bios_version);
 
@@ -1640,7 +1961,7 @@ static int __init check_features(void)
 			features.batt_charge_limit = true;
 			features.fan_extras        = true;
 		} else if (s_len > 0) {
-			// TODO
+			/* TODO */
 			pr_warn("cannot extract supported features");
 		}
 
@@ -1650,37 +1971,12 @@ static int __init check_features(void)
 	return 0;
 }
 
-static int __init setup_wmi_handlers(void)
+static int __init check_features(void)
 {
-	int err = 0;
-	acpi_status status;
+	(void) check_features_ec();
+	(void) check_features_bios();
 
-	status = wmi_install_notify_handler(QC71_WMI_EVENT0_GUID, qc71_wmi_event_handler, NULL);
-	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [0x%08lx] %s\n",
-		       (unsigned long) status, acpi_format_exception(status));
-		err = -ENODEV; goto out;
-	}
-	wmi_handlers_installed += 1;
-
-	status = wmi_install_notify_handler(QC71_WMI_EVENT1_GUID, qc71_wmi_event_handler, NULL);
-	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [0x%08lx] %s\n",
-		       (unsigned long) status, acpi_format_exception(status));
-		err = -ENODEV; goto out;
-	}
-	wmi_handlers_installed += 1;
-
-	status = wmi_install_notify_handler(QC71_WMI_EVENT2_GUID, qc71_wmi_event_handler, NULL);
-	if (ACPI_FAILURE(status)) {
-		pr_err("could not install WMI notify handler: [0x%08lx] %s\n",
-		       (unsigned long) status, acpi_format_exception(status));
-		err = -ENODEV; goto out;
-	}
-	wmi_handlers_installed += 1;
-
-out:
-	return err;
+	return 0;
 }
 
 static int __init setup_platform_dev(void)
@@ -1688,8 +1984,10 @@ static int __init setup_platform_dev(void)
 	int err = 0;
 
 	qc71_platform_dev = platform_device_alloc(DRIVERNAME, -1);
-	if (!qc71_platform_dev)
+	if (!qc71_platform_dev) {
+		err = -ENOMEM;
 		goto out;
+	}
 
 	qc71_platform_dev->dev.groups = qc71_laptop_groups;
 
@@ -1700,6 +1998,88 @@ static int __init setup_platform_dev(void)
 	}
 
 out:
+	return err;
+}
+
+static int __init setup_sysfs_attrs(void)
+{
+	size_t idx = 0;
+
+	qc71_laptop_attrs[idx++] = &dev_attr_manual_control.attr;
+
+	if (features.super_key_lock)
+		qc71_laptop_attrs[idx++] = &dev_attr_super_key_lock.attr;
+
+	if (features.fn_lock) {
+		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock.attr;
+		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock_switch.attr;
+	}
+
+	if (features.fan_extras) {
+		qc71_laptop_attrs[idx++] = &dev_attr_fan_reduced_duty_cycle.attr;
+		qc71_laptop_attrs[idx++] = &dev_attr_fan_always_on.attr;
+	}
+
+	qc71_laptop_attrs[idx] = NULL;
+
+	WARN_ON(idx >= ARRAY_SIZE(qc71_laptop_attrs));
+
+	return 0;
+}
+
+static int __init setup_input_dev(void)
+{
+	int err = 0;
+
+	qc71_input_dev = input_allocate_device();
+	if (!qc71_input_dev)
+		return -ENOMEM;
+
+	qc71_input_dev->name = "QC71 laptop input device";
+	qc71_input_dev->phys = "qc71_laptop/input0";
+	qc71_input_dev->id.bustype = BUS_HOST;
+	qc71_input_dev->dev.parent = &qc71_platform_dev->dev;
+
+	err = sparse_keymap_setup(qc71_input_dev, qc71_wmi_hotkeys, NULL);
+	if (err)
+		goto err_free_device;
+
+	err = qc71_rfkill_get_state();
+	if (err >= 0)
+		input_report_switch(qc71_input_dev, SW_RFKILL_ALL, err);
+
+	err = input_register_device(qc71_input_dev);
+	if (err)
+		goto err_free_device;
+
+	return err;
+
+err_free_device:
+	input_free_device(qc71_input_dev);
+	qc71_input_dev = NULL;
+
+	return err;
+}
+
+static int __init setup_wmi_handlers(void)
+{
+	int err = 0, i;
+
+	for (i = 0; i < ARRAY_SIZE(qc71_wmi_event_guids); i++) {
+		const char *guid = qc71_wmi_event_guids[i];
+		acpi_status status =
+			wmi_install_notify_handler(guid, qc71_wmi_event_handler, NULL);
+
+		if (ACPI_FAILURE(status)) {
+			pr_err("could not install WMI notify handler for '%s': [%#010lx] %s\n",
+			       guid, (unsigned long) status, acpi_format_exception(status));
+
+			break;
+		}
+
+		wmi_handlers_installed += 1;
+	}
+
 	return err;
 }
 
@@ -1723,10 +2103,8 @@ static int __init setup_hwmon(void)
 #if IS_ENABLED(CONFIG_ACPI_BATTERY)
 static int __init setup_battery_hook(void)
 {
-	if (features.batt_charge_limit) {
-		battery_hook_register(&qc71_laptop_batt_hook);
-		battery_hook_registered = true;
-	}
+	battery_hook_register(&qc71_laptop_batt_hook);
+	battery_hook_registered = true;
 
 	return 0;
 }
@@ -1744,28 +2122,6 @@ static int __init setup_lightbar_led(void)
 	return err;
 }
 #endif
-
-static int __init setup_sysfs_attrs(void)
-{
-	size_t idx = 0;
-
-	qc71_laptop_attrs[idx++] = &dev_attr_manual_control.attr;
-	qc71_laptop_attrs[idx++] = &dev_attr_super_key_lock.attr;
-
-	if (features.fn_lock)
-		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock.attr;
-
-	if (features.fan_extras) {
-		qc71_laptop_attrs[idx++] = &dev_attr_fan_reduced_duty_cycle.attr;
-		qc71_laptop_attrs[idx++] = &dev_attr_fan_always_on.attr;
-	}
-
-	qc71_laptop_attrs[idx] = NULL;
-
-	WARN_ON(idx >= ARRAY_SIZE(qc71_laptop_attrs));
-
-	return 0;
-}
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static int __init setup_debugfs(void)
@@ -1801,17 +2157,6 @@ out:
 
 static void do_cleanup(void)
 {
-	switch (wmi_handlers_installed) {
-	case 3:
-		wmi_remove_notify_handler(QC71_WMI_EVENT2_GUID); fallthrough;
-	case 2:
-		wmi_remove_notify_handler(QC71_WMI_EVENT1_GUID); fallthrough;
-	case 1:
-		wmi_remove_notify_handler(QC71_WMI_EVENT0_GUID); fallthrough;
-	default:
-		break;
-	}
-
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	debugfs_remove_recursive(qc71_debugfs_dir);
 #endif
@@ -1830,6 +2175,12 @@ static void do_cleanup(void)
 	if (!IS_ERR_OR_NULL(qc71_hwmon_dev))
 		hwmon_device_unregister(qc71_hwmon_dev);
 #endif
+
+	while (wmi_handlers_installed--)
+		wmi_remove_notify_handler(qc71_wmi_event_guids[wmi_handlers_installed]);
+
+	if (qc71_input_dev)
+		input_unregister_device(qc71_input_dev);
 
 	platform_device_unregister(qc71_platform_dev);
 }
@@ -1857,20 +2208,27 @@ static int __init qc71_laptop_module_init(void)
 		goto out;
 	}
 
-	pr_info("extra features: %s%s%s\n",
+	pr_info("features: %s%s%s%s%s%s\n",
+		features.super_key_lock ? "super-key-lock " : "",
+		features.lightbar ? "lightbar " : "",
+		features.fan_boost ? "fan-boost " : "",
 		features.fn_lock  ? "fn-lock " : "",
 		features.batt_charge_limit ? "charge-limit " : "",
 		features.fan_extras ? "fan-extras " : "");
-
-	err = setup_wmi_handlers();
-	if (err)
-		goto out;
 
 	err = setup_sysfs_attrs();
 	if (err)
 		goto out;
 
 	err = setup_platform_dev();
+	if (err)
+		goto out;
+
+	err = setup_input_dev();
+	if (err)
+		goto out;
+
+	err = setup_wmi_handlers();
 	if (err)
 		goto out;
 
@@ -1883,7 +2241,7 @@ static int __init qc71_laptop_module_init(void)
 #endif
 
 #if IS_ENABLED(CONFIG_ACPI_BATTERY)
-	if (!nobattery) {
+	if (!nobattery && features.batt_charge_limit) {
 		err = setup_battery_hook();
 		if (err)
 			goto out;
@@ -1891,7 +2249,7 @@ static int __init qc71_laptop_module_init(void)
 #endif
 
 #if IS_ENABLED(CONFIG_LEDS_CLASS)
-	if (!nolightbar) {
+	if (!nolightbar && features.lightbar) {
 		err = setup_lightbar_led();
 		if (err)
 			goto out;
