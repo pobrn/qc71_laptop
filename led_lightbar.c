@@ -312,8 +312,11 @@ int __init qc71_led_lightbar_setup(void)
 {
 	int err;
 
-	if (nolightbar || !qc71_features.lightbar)
-		return 0;
+	if (nolightbar)
+		return -EPERM;
+
+	if (!qc71_features.lightbar)
+		return -ENOTSUPP;
 
 	err = led_classdev_register(&qc71_platform_dev->dev, &qc71_lightbar_led);
 

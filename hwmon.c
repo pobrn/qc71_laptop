@@ -450,7 +450,7 @@ int __init qc71_hwmon_setup(void)
 	int err = 0;
 
 	if (nohwmon)
-		return 0;
+		return -EPERM;
 
 	qc71_hwmon_dev = hwmon_device_register_with_info(&qc71_platform_dev->dev,
 							 HWMON_NAME, NULL,
