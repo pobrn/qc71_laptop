@@ -197,10 +197,6 @@ static inline __must_check int ec_read_byte(uint16_t addr)
 	if (err)
 		return err;
 
-	pr_debug("%s(addr=%#06x): %#04x %#04x %#04x %#04x\n",
-		 __func__, (unsigned int) addr, result.bytes.b1,
-		 result.bytes.b2, result.bytes.b3, result.bytes.b4);
-
 	return result.bytes.b1;
 }
 

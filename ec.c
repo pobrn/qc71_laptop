@@ -33,10 +33,10 @@ int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 	static_assert(ARRAY_SIZE(buf) == 8);
 
 	/* the returned ACPI_TYPE_BUFFER is 40 bytes long for some reason ... */
-	uint8_t outbuf_buf[sizeof(union acpi_object) + 40];
+	uint8_t output_buf[sizeof(union acpi_object) + 40];
 
 	struct acpi_buffer input = { sizeof(buf), buf },
-			   output = { sizeof(outbuf_buf), outbuf_buf };
+			   output = { sizeof(output_buf), output_buf };
 	union acpi_object *obj;
 	acpi_status status = AE_OK;
 
@@ -44,6 +44,8 @@ int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 
 	if (err)
 		goto out;
+
+	memset(output_buf, 0, sizeof(output_buf));
 
 	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0,
 				     QC71_WMBC_GETSETULONG_ID, &input, &output);
@@ -67,10 +69,19 @@ int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 	}
 
 out:
-	pr_debug("%s(addr=%#06x, data=%#06x, result=%s, read=%s): (%d) [%#010lx] %s\n",
-		 __func__, (unsigned int) addr, (unsigned int) data,
-		 result ? "wants" : "NULL", read ? "yes" : "no", err,
-		 (unsigned long) status, acpi_format_exception(status));
+	pr_debug(
+		"%s(addr=%#06x, data=%#06x, result=%c, read=%c)"
+		": (%d) [%#010lx] %s"
+		": [%*ph]\n",
+
+		__func__, (unsigned int) addr, (unsigned int) data,
+		result ? 'y' : 'n', read ? 'y' : 'n',
+		err, (unsigned long) status, acpi_format_exception(status),
+		(obj && obj->type == ACPI_TYPE_BUFFER) ?
+			(int) min(sizeof(*result), (size_t) obj->buffer.length) : 0,
+		(obj && obj->type == ACPI_TYPE_BUFFER) ?
+			obj->buffer.pointer : NULL
+	);
 
 	return err;
 }

@@ -35,41 +35,24 @@
 #include "debugfs.h"
 
 /* ========================================================================== */
-#if 0
-static const struct dmi_system_id qc71_dmi_table[] __initconst = {
-	{
-		.matches = {
-			DMI_MATCH(DMI_BOARD_NAME, "LAPQC71"),
-			{ }
-		}
-	},
-	{
-		/* https://avell.com.br/avell-a60-muv-295765 */
-		.matches = {
-			DMI_EXACT_MATCH(DMI_CHASSIS_VENDOR, "Avell High Performance"),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "A60 MUV"),
-			{ }
-		}
-	},
-	{ }
-};
-MODULE_DEVICE_TABLE(dmi, qc71_dmi_table);
-#endif
-/* ========================================================================== */
 
-#define SUBMODULE_ENTRY(name) { #name, qc71_ ## name ## _setup, qc71_ ## name ## _cleanup }
+#define SUBMODULE_ENTRY(_name, _req) { .name = #_name, .init = qc71_ ## _name ## _setup, .cleanup = qc71_ ## _name ## _cleanup, .required = _req }
 
-static struct {
+static struct qc71_submodule {
 	const char *name;
+
+	bool required    : 1,
+	     initialized : 1;
+
 	int (*init)(void);
 	void (*cleanup)(void);
-} qc71_submodules[] = {
-	SUBMODULE_ENTRY(pdev), /* must be first */
-	SUBMODULE_ENTRY(wmi_events),
-	SUBMODULE_ENTRY(hwmon),
-	SUBMODULE_ENTRY(battery),
-	SUBMODULE_ENTRY(led_lightbar),
-	SUBMODULE_ENTRY(debugfs),
+} qc71_submodules[] __refdata = {
+	SUBMODULE_ENTRY(pdev, true), /* must be first */
+	SUBMODULE_ENTRY(wmi_events, false),
+	SUBMODULE_ENTRY(hwmon, false),
+	SUBMODULE_ENTRY(battery, false),
+	SUBMODULE_ENTRY(led_lightbar, false),
+	SUBMODULE_ENTRY(debugfs, false),
 };
 
 #undef SUBMODULE_ENTRY
@@ -78,20 +61,17 @@ static void do_cleanup(void)
 {
 	int i;
 
-	for (i = ARRAY_SIZE(qc71_submodules) - 1; i >= 0; i--)
-		qc71_submodules[i].cleanup();
+	for (i = ARRAY_SIZE(qc71_submodules) - 1; i >= 0; i--) {
+		const struct qc71_submodule *sm = &qc71_submodules[i];
+
+		if (sm->initialized)
+			sm->cleanup();
+	}
 }
 
 static int __init qc71_laptop_module_init(void)
 {
 	int err = 0, i;
-
-#if 0
-	if (!dmi_check_system(qc71_dmi_table)) {
-		pr_err("no DMI match\n");
-		err = -ENODEV; goto out;
-	}
-#endif
 
 	if (!wmi_has_guid(QC71_WMI_WMBC_GUID)) {
 		pr_err("WMI GUID not found\n");
@@ -104,23 +84,29 @@ static int __init qc71_laptop_module_init(void)
 		goto out;
 	}
 
-	pr_info("features: %s%s%s%s%s%s\n",
-		qc71_features.super_key_lock ? "super-key-lock " : "",
-		qc71_features.lightbar ? "lightbar " : "",
-		qc71_features.fan_boost ? "fan-boost " : "",
-		qc71_features.fn_lock  ? "fn-lock " : "",
-		qc71_features.batt_charge_limit ? "charge-limit " : "",
-		qc71_features.fan_extras ? "fan-extras " : "");
+	pr_info("supported features:");
+	if (qc71_features.super_key_lock)    pr_cont(" super-key-lock");
+	if (qc71_features.lightbar)          pr_cont(" lightbar");
+	if (qc71_features.fan_boost)         pr_cont(" fan-boost");
+	if (qc71_features.fn_lock)           pr_cont(" fn-lock");
+	if (qc71_features.batt_charge_limit) pr_cont(" charge-limit");
+	if (qc71_features.fan_extras)        pr_cont(" fan-extras");
+	pr_cont("\n");
 
 	for (i = 0; i < ARRAY_SIZE(qc71_submodules); i++) {
-		const char *name = qc71_submodules[i].name;
-		
-		err = qc71_submodules[i].init();
+		struct qc71_submodule *sm = &qc71_submodules[i];
+
+		err = sm->init();
 		if (err) {
-			pr_err("failed to initialize %s submodule: %d\n", name, err);
-			goto out;
+			pr_warn("failed to initialize %s submodule: %d\n", sm->name, err);
+			if (sm->required)
+				goto out;
+		} else {
+			sm->initialized = true;
 		}
 	}
+
+	err = 0;
 
 out:
 	if (err)

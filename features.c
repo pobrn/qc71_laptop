@@ -4,6 +4,7 @@
 #include <linux/ctype.h>
 #include <linux/dmi.h>
 #include <linux/init.h>
+#include <linux/mod_devicetable.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 
@@ -15,6 +16,26 @@
 struct oem_string_walker_data {
 	char *value;
 	int index;
+};
+
+/* ========================================================================== */
+
+static const struct dmi_system_id qc71_dmi_table[] __initconst = {
+	{
+		.matches = {
+			DMI_MATCH(DMI_BOARD_NAME, "LAPQC71"),
+			{ }
+		}
+	},
+	{
+		/* https://avell.com.br/avell-a60-muv-295765 */
+		.matches = {
+			DMI_EXACT_MATCH(DMI_CHASSIS_VENDOR, "Avell High Performance"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "A60 MUV"),
+			{ }
+		}
+	},
+	{ }
 };
 
 /* ========================================================================== */
@@ -112,6 +133,11 @@ static int __init check_features_bios(void)
 {
 	const char *bios_version_str;
 	int bios_version;
+
+	if (!dmi_check_system(qc71_dmi_table)) {
+		pr_warn("no DMI match\n");
+		return -ENODEV;
+	}
 
 	bios_version_str = dmi_get_system_info(DMI_BIOS_VERSION);
 
