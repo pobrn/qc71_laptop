@@ -17,6 +17,9 @@ static const struct qc71_debugfs_attr {
 	const char *name;
 	uint16_t addr;
 } qc71_debugfs_attrs[] = {
+	{"1108", 1108},
+	{"1110", 1110},
+
 	{"ap_bios_byte",     AP_BIOS_BYTE_ADDR},
 
 	{"batt_alert",       BATT_ALERT_ADDR},

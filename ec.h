@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef QC71_LAPTOP_EC_H
 #define QC71_LAPTOP_EC_H
 

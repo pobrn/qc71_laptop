@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef QC71_WMI_EVENTS_H
 #define QC71_WMI_EVENTS_H
 

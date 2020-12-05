@@ -19,10 +19,13 @@
 
 /* ========================================================================== */
 
-static const char * const qc71_wmi_event_guids[] = {
-	QC71_WMI_EVENT0_GUID,
-	QC71_WMI_EVENT1_GUID,
-	QC71_WMI_EVENT2_GUID,
+static struct {
+	const char *guid;
+	bool handler_installed;
+} qc71_wmi_event_guids[] = {
+	{ .guid = QC71_WMI_EVENT0_GUID },
+	{ .guid = QC71_WMI_EVENT1_GUID },
+	{ .guid = QC71_WMI_EVENT2_GUID },
 };
 
 static const struct key_entry qc71_wmi_hotkeys[] = {
@@ -59,8 +62,6 @@ static const struct key_entry qc71_wmi_hotkeys[] = {
 };
 
 /* ========================================================================== */
-
-static int wmi_handlers_installed;
 
 static struct input_dev *qc71_input_dev;
 
@@ -372,18 +373,16 @@ int __init qc71_wmi_events_setup(void)
 	(void) setup_input_dev();
 
 	for (i = 0; i < ARRAY_SIZE(qc71_wmi_event_guids); i++) {
-		const char *guid = qc71_wmi_event_guids[i];
+		const char *guid = qc71_wmi_event_guids[i].guid;
 		acpi_status status =
 			wmi_install_notify_handler(guid, qc71_wmi_event_handler, NULL);
 
 		if (ACPI_FAILURE(status)) {
-			pr_err("could not install WMI notify handler for '%s': [%#010lx] %s\n",
-			       guid, (unsigned long) status, acpi_format_exception(status));
-
-			break;
+			pr_warn("could not install WMI notify handler for '%s': [%#010lx] %s\n",
+			        guid, (unsigned long) status, acpi_format_exception(status));
+		} else {
+			qc71_wmi_event_guids[i].handler_installed = true;
 		}
-
-		wmi_handlers_installed += 1;
 	}
 
 	return err;
@@ -391,8 +390,13 @@ int __init qc71_wmi_events_setup(void)
 
 void qc71_wmi_events_cleanup(void)
 {
-	while (wmi_handlers_installed--)
-		wmi_remove_notify_handler(qc71_wmi_event_guids[wmi_handlers_installed]);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(qc71_wmi_event_guids); i++)
+		if (qc71_wmi_event_guids[i].handler_installed) {
+			wmi_remove_notify_handler(qc71_wmi_event_guids[i].guid);
+			qc71_wmi_event_guids[i].handler_installed = false;
+		}
 
 	if (qc71_input_dev)
 		input_unregister_device(qc71_input_dev);
