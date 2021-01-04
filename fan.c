@@ -38,7 +38,7 @@ static int qc71_fan_get_status(void)
 }
 
 /* 'fan_lock' must be held */
-static int qc71_fan_get_mode_core(void)
+static int qc71_fan_get_mode_unlocked(void)
 {
 	int err;
 
@@ -113,7 +113,7 @@ int qc71_fan_get_pwm(uint8_t fan_index)
 		return -EINVAL;
 
 	err = ec_read_byte(qc71_fan_pwm_addrs[fan_index]);
-	if (err)
+	if (err < 0)
 		return err;
 
 	return linear_mapping(0, FAN_MAX_PWM, err, 0, U8_MAX);
@@ -143,7 +143,7 @@ int qc71_fan_get_mode(void)
 	if (err)
 		return err;
 
-	err = qc71_fan_get_mode_core();
+	err = qc71_fan_get_mode_unlocked();
 
 	mutex_unlock(&fan_lock);
 	return err;
