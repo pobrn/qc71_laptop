@@ -4,6 +4,8 @@
 #include <linux/debugfs.h>
 #include <linux/init.h>
 #include <linux/moduleparam.h>
+#include <linux/uaccess.h>
+#include <linux/sched/signal.h>
 #include <linux/types.h>
 
 #include "debugfs.h"
@@ -18,7 +20,6 @@ static const struct qc71_debugfs_attr {
 	uint16_t addr;
 } qc71_debugfs_attrs[] = {
 	{"1108", 1108},
-	{"1110", 1110},
 
 	{"ap_bios_byte",     AP_BIOS_BYTE_ADDR},
 
@@ -36,6 +37,8 @@ static const struct qc71_debugfs_attr {
 	{"ctrl_2",           CTRL_2_ADDR},
 	{"ctrl_3",           CTRL_3_ADDR},
 	{"ctrl_4",           CTRL_4_ADDR},
+	{"ctrl_5",           CTRL_5_ADDR},
+	{"ctrl_6",           CTRL_6_ADDR},
 
 	{"device_status",    DEVICE_STATUS_ADDR},
 
@@ -70,6 +73,8 @@ static const struct qc71_debugfs_attr {
 	{"lightbar_green",   LIGHTBAR_GREEN_ADDR},
 	{"lightbar_blue",    LIGHTBAR_BLUE_ADDR},
 
+	{"keyboard_type",    KEYBOARD_TYPE_ADDR},
+
 	{"support_1",        SUPPORT_1_ADDR},
 	{"support_2",        SUPPORT_2_ADDR},
 	{"support_5",        SUPPORT_5_ADDR},
@@ -93,7 +98,8 @@ static bool debugregs;
 module_param(debugregs, bool, 0444);
 MODULE_PARM_DESC(debugregs, "expose various EC registers in debugfs (default=false)");
 
-static struct dentry *qc71_debugfs_dir;
+static struct dentry *qc71_debugfs_dir,
+		     *qc71_debugfs_regs_dir;
 
 /* ========================================================================== */
 
@@ -130,13 +136,81 @@ DEFINE_DEBUGFS_ATTRIBUTE(qc71_debugfs_fops, get_debugfs_byte, set_debugfs_byte, 
 
 /* ========================================================================== */
 
+static ssize_t qc71_debugfs_ec_read(struct file *f, char __user *buf, size_t count, loff_t *offset)
+{
+	size_t i;
+
+	for (i = 0; *offset + i < U16_MAX && i < count; i++) {
+		int err = ec_read_byte(*offset + i);
+		u8 byte;
+
+		if (signal_pending(current))
+			return -EINTR;
+
+		if (err < 0) {
+			if (i)
+				break;
+
+			return err;
+		}
+
+		byte = err;
+
+		if (put_user(byte, buf + i))
+			return -EFAULT;
+	}
+
+	*offset += i;
+
+	return i;
+}
+
+static ssize_t qc71_debugfs_ec_write(struct file *f, const char __user *buf, size_t count, loff_t *offset)
+{
+	size_t i;
+
+	for (i = 0; *offset + i < U16_MAX && i < count; i++) {
+		int err;
+		u8 byte;
+
+		if (get_user(byte, buf + i))
+			return -EFAULT;
+
+		err = ec_write_byte(*offset + i, byte);
+		if (err) {
+			if (i)
+				break;
+
+			return err;
+		}
+
+		if (signal_pending(current))
+			return -EINTR;
+	}
+
+	*offset += i;
+
+	return i;
+}
+
+static const struct file_operations qc71_debugfs_ec_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = qc71_debugfs_ec_read,
+	.write = qc71_debugfs_ec_write,
+	.llseek = default_llseek,
+};
+
+/* ========================================================================== */
+
 int __init qc71_debugfs_setup(void)
 {
+	struct dentry *d;
 	int err = 0;
 	size_t i;
 
 	if (!debugregs)
-		return 0;
+		return -ENODEV;
 
 	qc71_debugfs_dir = debugfs_create_dir(DEBUGFS_DIR_NAME, NULL);
 
@@ -145,15 +219,32 @@ int __init qc71_debugfs_setup(void)
 		goto out;
 	}
 
+	qc71_debugfs_regs_dir = debugfs_create_dir("regs", qc71_debugfs_dir);
+
+	if (IS_ERR(qc71_debugfs_regs_dir)) {
+		err = PTR_ERR(qc71_debugfs_regs_dir);
+		debugfs_remove_recursive(qc71_debugfs_dir);
+		goto out;
+	}
+
 	for (i = 0; i < ARRAY_SIZE(qc71_debugfs_attrs); i++) {
 		const struct qc71_debugfs_attr *attr = &qc71_debugfs_attrs[i];
-		struct dentry *d = debugfs_create_file(attr->name, 0600, qc71_debugfs_dir,
-						       (void *) attr, &qc71_debugfs_fops);
+
+		d = debugfs_create_file(attr->name, 0600, qc71_debugfs_regs_dir,
+					(void *) attr, &qc71_debugfs_fops);
 
 		if (IS_ERR(d)) {
 			err = PTR_ERR(d);
+			debugfs_remove_recursive(qc71_debugfs_dir);
 			goto out;
 		}
+	}
+
+	d = debugfs_create_file("ec", 0600, qc71_debugfs_dir, NULL, &qc71_debugfs_ec_fops);
+	if (IS_ERR(d)) {
+		err = PTR_ERR(d);
+		debugfs_remove_recursive(qc71_debugfs_dir);
+		goto out;
 	}
 
 out:

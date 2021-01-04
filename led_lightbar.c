@@ -2,6 +2,7 @@
 #include "pr.h"
 
 #include <linux/init.h>
+/* #include <linux/led-class-multicolor.h> */
 #include <linux/leds.h>
 #include <linux/moduleparam.h>
 #include <linux/types.h>
@@ -29,21 +30,21 @@ static const uint16_t lightbar_color_addrs[LIGHTBAR_COLOR_COUNT] = {
 	[LIGHTBAR_BLUE]  = LIGHTBAR_BLUE_ADDR,
 };
 
-static const uint8_t lightbar_colors[] = {
+static const uint8_t lightbar_colors[LIGHTBAR_COLOR_COUNT] = {
 	LIGHTBAR_RED,
 	LIGHTBAR_GREEN,
 	LIGHTBAR_BLUE,
 };
 
 /* f(x) = 4x */
-static const uint8_t lightbar_color_values[][10] = {
+static const uint8_t lightbar_color_values[LIGHTBAR_COLOR_COUNT][10] = {
 	[LIGHTBAR_RED]   = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 	[LIGHTBAR_GREEN] = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 	[LIGHTBAR_BLUE]  = {0, 4, 8, 12, 16, 20, 24, 28, 32, 36},
 };
 
 /* inverse of 'lightbar_color_values' */
-static const uint8_t lightbar_pwm_to_level[][256] = {
+static const uint8_t lightbar_pwm_to_level[LIGHTBAR_COLOR_COUNT][256] = {
 	[LIGHTBAR_RED] = {
 		 [0] = 0,
 		 [4] = 1,
@@ -283,6 +284,39 @@ static int qc71_lightbar_led_set_brightness(struct led_classdev *led_cdev,
 	return qc71_lightbar_switch(LIGHTBAR_CTRL_S0_OFF, !!value);
 }
 
+#if 0
+static int qc71_lightbar_led_set_brightness(struct led_classdev *led_cdev,
+					    enum led_brightness brightness)
+{
+	struct led_classdev_mc *led_mc_cdev = lcdev_to_mccdev(led_cdev);
+	unsigned int color = 0, i;
+	int err;
+
+	led_mc_calc_color_components(led_mc_cdev, brightness);
+
+	for (i = 0; i < led_mc_cdev->num_colors; i++) {
+		if (led_mc_cdev->subled_info[i].brightness > 9)
+			return -EINVAL;
+
+		color = 10 * color + led_mc_cdev->subled_info[i].brightness;
+	}
+
+	if (color) {
+		err = qc71_lightbar_switch(LIGHTBAR_CTRL_S0_OFF, 1);
+
+		if (err)
+			goto out;
+
+		err = qc71_lightbar_set_color(color);
+	} else {
+		err = qc71_lightbar_switch(LIGHTBAR_CTRL_S0_OFF, 0);
+	}
+
+out:
+	return err;
+}
+#endif
+
 /* ========================================================================== */
 
 static DEVICE_ATTR(brightness_s3, 0644, lightbar_s3_show,      lightbar_s3_store);
@@ -306,30 +340,65 @@ static struct led_classdev qc71_lightbar_led = {
 	.groups                  = qc71_lightbar_led_groups,
 };
 
+#if 0
+static struct mc_subled qc71_lightbar_subleds[LIGHTBAR_COLOR_COUNT] = {
+	[LIGHTBAR_RED] = {
+		.color_index = LED_COLOR_ID_RED,
+	},
+	[LIGHTBAR_GREEN] = {
+		.color_index = LED_COLOR_ID_GREEN,
+	},
+	[LIGHTBAR_BLUE] = {
+		.color_index = LED_COLOR_ID_BLUE,
+	},
+};
+
+static struct led_classdev_mc qc71_lightbar_led = {
+	.num_colors  = ARRAY_SIZE(qc71_lightbar_subleds),
+	.subled_info = qc71_lightbar_subleds,
+	.led_cdev = {
+		.name                    = KBUILD_MODNAME "::lightbar",
+		.max_brightness          = 9,
+		.brightness_set_blocking = qc71_lightbar_led_set_brightness,
+	},
+};
+#endif
+
 /* ========================================================================== */
 
 int __init qc71_led_lightbar_setup(void)
 {
 	int err;
 
-	if (nolightbar)
-		return -EPERM;
+	if (nolightbar || !qc71_features.lightbar)
+		return -ENODEV;
 
-	if (!qc71_features.lightbar)
-		return -ENOTSUPP;
-
+#if 0
+	err = led_classdev_multicolor_register(&qc71_platform_dev->dev, &qc71_lightbar_led);
+#endif
 	err = led_classdev_register(&qc71_platform_dev->dev, &qc71_lightbar_led);
 
 	if (!err)
 		lightbar_led_registered = true;
+
+#if 0
+	err = device_add_groups(qc71_lightbar_led.led_cdev.dev, qc71_lightbar_led_groups);
+	if (err)
+		led_classdev_multicolor_unregister(&qc71_lightbar_led);
+#endif
 
 	return err;
 }
 
 void qc71_led_lightbar_cleanup(void)
 {
-	if (lightbar_led_registered)
+	if (lightbar_led_registered) {
+#if 0
+		device_remove_groups(qc71_lightbar_led.led_cdev.dev, qc71_lightbar_led_groups);
+		led_classdev_multicolor_unregister(&qc71_lightbar_led);
+#endif
 		led_classdev_unregister(&qc71_lightbar_led);
+	}
 }
 
 #endif

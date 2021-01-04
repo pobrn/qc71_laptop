@@ -2,7 +2,7 @@
 #ifndef QC71_PR_H
 #define QC71_PR_H
 
-#define pr_fmt(fmt) KBUILD_MODNAME "/" KBUILD_BASENAME ": " fmt
+#define pr_fmt(fmt) KBUILD_MODNAME "/" KBUILD_BASENAME ": %s: " fmt, __func__
 
 #include <linux/printk.h>
 

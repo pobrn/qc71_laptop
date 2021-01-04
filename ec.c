@@ -4,7 +4,7 @@
 #include <linux/acpi.h>
 #include <linux/compiler_types.h>
 #include <linux/error-injection.h>
-#include <linux/mutex.h>
+#include <linux/rwsem.h>
 #include <linux/printk.h>
 #include <linux/wmi.h>
 
@@ -13,9 +13,20 @@
 
 /* ========================================================================== */
 
-static DEFINE_MUTEX(ec_lock);
+static DECLARE_RWSEM(ec_lock);
 
 /* ========================================================================== */
+
+int __must_check qc71_ec_lock(void)
+{
+	return down_write_killable(&ec_lock);
+}
+
+void qc71_ec_unlock(void)
+{
+	up_write(&ec_lock);
+}
+
 
 int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 				     union qc71_ec_result *result, bool read)
@@ -39,8 +50,10 @@ int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 			   output = { sizeof(output_buf), output_buf };
 	union acpi_object *obj;
 	acpi_status status = AE_OK;
+	int err;
 
-	int err = mutex_lock_interruptible(&ec_lock);
+	if (read) err = down_read_killable(&ec_lock);
+	else      err = down_write_killable(&ec_lock);
 
 	if (err)
 		goto out;
@@ -50,7 +63,8 @@ int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 	status = wmi_evaluate_method(QC71_WMI_WMBC_GUID, 0,
 				     QC71_WMBC_GETSETULONG_ID, &input, &output);
 
-	mutex_unlock(&ec_lock);
+	if (read) up_read(&ec_lock);
+	else      up_write(&ec_lock);
 
 	if (ACPI_FAILURE(status)) {
 		err = -EIO;

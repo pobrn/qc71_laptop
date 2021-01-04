@@ -10,12 +10,12 @@ $(MODNAME)-y += ec.o \
 		main.o \
 		misc.o \
 		pdev.o \
-		wmi_events.o \
+		events.o \
 
 $(MODNAME)-$(CONFIG_DEBUG_FS)     += debugfs.o
 $(MODNAME)-$(CONFIG_ACPI_BATTERY) += battery.o
 $(MODNAME)-$(CONFIG_LEDS_CLASS)   += led_lightbar.o
-$(MODNAME)-$(CONFIG_HWMON)        += hwmon.o
+$(MODNAME)-$(CONFIG_HWMON)        += hwmon.o hwmon_fan.o hwmon_pwm.o fan.o
 
 KDIR = /lib/modules/$(shell uname -r)/build
 MDIR = /usr/src/$(MODNAME)-$(MODVER)

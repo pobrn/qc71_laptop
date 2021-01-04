@@ -15,7 +15,6 @@
 #include "pr.h"
 
 #include <linux/dmi.h>
-#include <linux/errname.h>
 #include <linux/init.h>
 #include <linux/kconfig.h>
 #include <linux/module.h>
@@ -23,12 +22,13 @@
 #include <linux/types.h>
 #include <linux/wmi.h>
 
+#include "ec.h"
 #include "features.h"
 #include "wmi.h"
 
 /* submodules */
 #include "pdev.h"
-#include "wmi_events.h"
+#include "events.h"
 #include "hwmon.h"
 #include "battery.h"
 #include "led_lightbar.h"
@@ -77,6 +77,22 @@ static int __init qc71_laptop_module_init(void)
 		pr_err("WMI GUID not found\n");
 		err = -ENODEV; goto out;
 	}
+
+	err = ec_read_byte(PROJ_ID_ADDR);
+	if (err < 0) {
+		pr_err("failed to query project id: %d\n", err);
+		goto out;
+	}
+
+	pr_info("project id: %d\n", err);
+
+	err = ec_read_byte(PLATFORM_ID_ADDR);
+	if (err < 0) {
+		pr_err("failed to query platform id: %d\n", err);
+		goto out;
+	}
+
+	pr_info("platform id: %d\n", err);
 
 	err = qc71_check_features();
 	if (err) {
@@ -131,5 +147,4 @@ module_exit(qc71_laptop_module_cleanup);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Barnabás Pőcze <pobrn@protonmail.com>");
 MODULE_DESCRIPTION("QC71 laptop platform driver");
-MODULE_VERSION("0.1");
 MODULE_ALIAS("wmi:" QC71_WMI_WMBC_GUID);
