@@ -1,15 +1,12 @@
 # What is it?
 This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fusion 15, Eluktronics MAG 15, Aftershock Vapor 15, ...).
 
-# Disclaimer
-**This software is in early stages of developement. Futhermore, to quote GPL: everything is provided as is. There is no warranty for the program, to the extent permitted by applicable law.**
-
-**This software is licensed under the GNU General Public License v2.0**
+# DisclaimerT
 
 
 # Compatibility
 It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4`, `5.8`, and `5.9` kernel series.
-
+The lightbar control functions on a Tongfang GK7C chassis (XMG Neo 17, PCS Recoil III, Walmart OP17).
 
 # Dependencies
 ### Required
@@ -22,7 +19,7 @@ It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and wi
 
 # Features
 ## Current
-* Integrate fan speeds into the Linux hardware monitoring subsyste (so that `lm_sensors` can pick it up)
+* Integrate fan speeds into the Linux hardware monitoring subsystem (so that `lm_sensors` can pick it up)
 * Control the lightbar
 * Enable/disable always-on mode, reduced fan duty cycle (BIOS 0114 and above)
 * Fn lock (BIOS 0114 and above)
@@ -93,7 +90,7 @@ sudo make dkmsinstall
 After loading the module the fan speeds should immediately appear in the output of `sensors`, and all your favourite monitoring utilities (e.g. the [Freon](https://extensions.gnome.org/extension/841/freon/) GNOME shell extension) that use `sensors`.
 
 
-## Controllig the lightbar
+## Controlling the lightbar
 The lightbar is integrated into the LED subsystem of the linux kernel. When the module is loaded, `/sys/class/leds/qc71_laptop::lightbar` directory should exist with the following important files:
 ```
 /sys/class/leds/qc71_laptop::lightbar/brightness
