@@ -1,8 +1,11 @@
 # What is it?
 This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fusion 15, Eluktronics MAG 15, Aftershock Vapor 15, ...).
 
-# DisclaimerT
 
+# Disclaimer
+**This software is in early stages of developement. Futhermore, to quote GPL: everything is provided as is. There is no warranty for the program, to the extent permitted by applicable law.**
+
+**This software is licensed under the GNU General Public License v2.0**
 
 # Compatibility
 It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4`, `5.8`, and `5.9` kernel series.
