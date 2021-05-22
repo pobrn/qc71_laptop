@@ -183,7 +183,7 @@ static ssize_t lightbar_s3_show(struct device *dev,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%d\n", (int) !(value & LIGHTBAR_CTRL_S3_OFF));
+	return sprintf(buf, "%d\n", !(value & LIGHTBAR_CTRL_S3_OFF));
 }
 
 static ssize_t lightbar_s3_store(struct device *dev, struct device_attribute *attr,
@@ -248,7 +248,7 @@ static ssize_t lightbar_rainbow_show(struct device *dev,
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & LIGHTBAR_CTRL_RAINBOW));
+	return sprintf(buf, "%d\n", !!(status & LIGHTBAR_CTRL_RAINBOW));
 }
 
 static ssize_t lightbar_rainbow_store(struct device *dev, struct device_attribute *attr,

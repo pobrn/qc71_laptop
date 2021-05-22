@@ -27,7 +27,7 @@ static ssize_t fan_reduced_duty_cycle_show(struct device *dev,
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE));
+	return sprintf(buf, "%d\n", !!(status & BIOS_CTRL_3_FAN_REDUCED_DUTY_CYCLE));
 }
 
 static ssize_t fan_reduced_duty_cycle_store(struct device *dev, struct device_attribute *attr,
@@ -61,7 +61,7 @@ static ssize_t fan_always_on_show(struct device *dev,
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & BIOS_CTRL_3_FAN_ALWAYS_ON));
+	return sprintf(buf, "%d\n", !!(status & BIOS_CTRL_3_FAN_ALWAYS_ON));
 }
 
 static ssize_t fan_always_on_store(struct device *dev, struct device_attribute *attr,
@@ -122,7 +122,7 @@ static ssize_t fn_lock_switch_show(struct device *dev,
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & AP_BIOS_BYTE_FN_LOCK_SWITCH));
+	return sprintf(buf, "%d\n", !!(status & AP_BIOS_BYTE_FN_LOCK_SWITCH));
 }
 
 static ssize_t fn_lock_switch_store(struct device *dev, struct device_attribute *attr,
@@ -156,7 +156,7 @@ static ssize_t manual_control_show(struct device *dev,
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & CTRL_1_MANUAL_MODE));
+	return sprintf(buf, "%d\n", !!(status & CTRL_1_MANUAL_MODE));
 }
 
 static ssize_t manual_control_store(struct device *dev, struct device_attribute *attr,
@@ -190,7 +190,7 @@ static ssize_t super_key_lock_show(struct device *dev,
 	if (status < 0)
 		return status;
 
-	return sprintf(buf, "%d\n", (int) !!(status & STATUS_1_SUPER_KEY_LOCK));
+	return sprintf(buf, "%d\n", !!(status & STATUS_1_SUPER_KEY_LOCK));
 }
 
 static ssize_t super_key_lock_store(struct device *dev, struct device_attribute *attr,
