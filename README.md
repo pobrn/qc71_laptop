@@ -6,10 +6,9 @@ This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fu
 
 **This software is licensed under the GNU General Public License v2.0**
 
-
 # Compatibility
 It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4`, `5.8`, and `5.9` kernel series.
-
+Some functions have been confirmed to work on the Tongfang GK7C chassis (XMG Neo 17, PCS Recoil III, Walmart OP17) (see [#6][issue6]).
 
 # Dependencies
 ### Required
@@ -22,7 +21,7 @@ It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and wi
 
 # Features
 ## Current
-* Integrate fan speeds into the Linux hardware monitoring subsyste (so that `lm_sensors` can pick it up)
+* Integrate fan speeds into the Linux hardware monitoring subsystem (so that `lm_sensors` can pick it up)
 * Control the lightbar
 * Enable/disable always-on mode, reduced fan duty cycle (BIOS 0114 and above)
 * Fn lock (BIOS 0114 and above)
@@ -93,7 +92,7 @@ sudo make dkmsinstall
 After loading the module the fan speeds should immediately appear in the output of `sensors`, and all your favourite monitoring utilities (e.g. the [Freon](https://extensions.gnome.org/extension/841/freon/) GNOME shell extension) that use `sensors`.
 
 
-## Controllig the lightbar
+## Controlling the lightbar
 The lightbar is integrated into the LED subsystem of the linux kernel. When the module is loaded, `/sys/class/leds/qc71_laptop::lightbar` directory should exist with the following important files:
 ```
 /sys/class/leds/qc71_laptop::lightbar/brightness
@@ -223,3 +222,6 @@ You can use `acpi_listen` to see what events are generated when you plug the mac
 # Troubleshooting
 
 * The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. I do not recommend using both at the same time.
+
+
+[issue6]: https://github.com/pobrn/qc71_laptop/issues/6
