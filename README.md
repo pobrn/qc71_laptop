@@ -1,14 +1,17 @@
 # What is it?
 This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fusion 15, Eluktronics MAG 15, Aftershock Vapor 15, ...).
 
+
 # Disclaimer
 **This software is in early stages of developement. Futhermore, to quote GPL: everything is provided as is. There is no warranty for the program, to the extent permitted by applicable law.**
 
 **This software is licensed under the GNU General Public License v2.0**
 
+
 # Compatibility
-It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4`, `5.8`, and `5.9` kernel series.
+It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4`, and `5.8`-`5.13` kernel series.
 Some functions have been confirmed to work on the Tongfang GK7C chassis (XMG Neo 17, PCS Recoil III, Walmart OP17) (see [#6][issue6]).
+
 
 # Dependencies
 ### Required
@@ -39,7 +42,7 @@ If you don't, then you can download it [here](https://github.com/pobrn/qc71_lapt
 
 ## Installing
 ### Linux headers
-On Debian and its [many](https://www.debian.org/derivatives/) [derivatives](https://wiki.ubuntu.com/DerivativeTeam/Derivatives) (Ubuntu, Pop OS, Linux Mint, ...) , run
+On Debian and its [many][debian-derivatives] [derivatives][ubuntu-derivatives] (Ubuntu, Pop OS, Linux Mint, ...) , run
 ```
 sudo apt install linux-headers-$(uname -r)
 ```
@@ -50,10 +53,8 @@ On Arch Linux and its derivatives (Manjaro, ...), run
 sudo pacman -Syu linux-headers
 ```
 
-
 ### DKMS (optional)
 DKMS should be in your distributions repositories. `sudo apt install dkms`, `sudo pacman -Syu dkms` should work depending on your distribution.
-
 
 ### The module
 #### Manually
@@ -74,7 +75,7 @@ sudo make dkmsuninstall
 ```
 to uninstall the module.
 
-The module should automatically load at boot after this. If you want to load it immediately, run `sudo modprobe qc71_laptop`. If it reports an error, and you're convinced your device should be supported, please open an issue.
+The module should automatically load at boot after this. If you want to load it immediately, run `sudo modprobe qc71_laptop`. If it reports an error, and you're convinced your device should be supported, please open an [issue][issues].
 
 ## Upgrade
 
@@ -87,10 +88,10 @@ then update the sources (pull the repository, download the sources again manuall
 sudo make dkmsinstall
 ```
 
+
 # How to use
 ## Fan speeds
-After loading the module the fan speeds should immediately appear in the output of `sensors`, and all your favourite monitoring utilities (e.g. the [Freon](https://extensions.gnome.org/extension/841/freon/) GNOME shell extension) that use `sensors`.
-
+After loading the module the fan speeds and temperatures should immediately appear in the output of `sensors`, and all your favourite monitoring utilities (e.g. the [Freon][gnome-ext-freon] GNOME shell extension) that use `sensors`.
 
 ## Controlling the lightbar
 The lightbar is integrated into the LED subsystem of the linux kernel. When the module is loaded, `/sys/class/leds/qc71_laptop::lightbar` directory should exist with the following important files:
@@ -156,7 +157,6 @@ will cause the fans to run continuously. Writing `0` will turn it off.
 ```
 will cause the fans to run at 25% of their capacity (about 2300 RPM) at idle (instead of 30% - about 2700 RPM). Writing `0` will restore the 30% idle duty cycle.
 
-
 ## Fn lock
 ```
 # echo 1 > /sys/devices/platform/qc71_laptop/fn_lock_switch
@@ -168,14 +168,12 @@ will enable changing the Fn lock state by pressing Fn+ESC. If this file contains
 ```
 will directly enable the Fn lock. If this file contains `1`, then pressing the functions keys will trigger their secondary functions (mute, brightness up, etc.); if this file contains `0`, then pressing the functions keys will trigger their primary functions (F1, F2, ...).
 
-
 ## Battery charge limit
 The file `/sys/class/power_supply/BAT0/charge_control_end_threshold` contains the current charge threshold. Writing a number between 1 and 100 will cause the battery charging limit to be set to that percentage. (I did not test extremely low values, so I cannot say if they work). For example:
 ```
 # echo 60 > /sys/class/power_supply/BAT0/charge_control_end_threshold
 ```
 will cause charging to stop when the battery reaches 60% of its capacity.
-
 
 ## Super key (windows key) lock
 It is possible to disable the super (windows) key by pressing Fn+F2 (or just F2 if the Fn lock is enabled). This can be also achieved by changing the writing the appropriate value into `/sys/devices/platform/qc71_laptop/super_key_lock`.
@@ -187,7 +185,6 @@ disables the super key, while
 # echo 0 > /sys/devices/platform/qc71_laptop/super_key_lock
 ```
 enables it. Reading the file will provide information about the current state of the super key. `0` means enabled, `1` means disabled.
-
 
 ## Example use
 
@@ -219,9 +216,15 @@ The XMG Control Center can change the color if the device is on battery or plugg
 ```
 You can use `acpi_listen` to see what events are generated when you plug the machine in or disconnect the charger. You might need to modify the third line (in this snippet).
 
+
 # Troubleshooting
 
-* The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. I do not recommend using both at the same time.
+* The [TUXEDO Control Center][tcc-github] may interfere with the operation of this kernel module. I do not recommend using both at the same time.
 
 
 [issue6]: https://github.com/pobrn/qc71_laptop/issues/6
+[debian-derivatives]: https://www.debian.org/derivatives/
+[ubuntu-derivatives]: https://wiki.ubuntu.com/DerivativeTeam/Derivatives
+[issues]: https://github.com/pobrn/qc71_laptop/issues
+[gnome-ext-freon]: https://extensions.gnome.org/extension/841/freon/
+[tcc-github]: https://github.com/tuxedocomputers/tuxedo-control-center
