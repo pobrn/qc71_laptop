@@ -1,7 +1,6 @@
 # What is it?
 This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fusion 15, Eluktronics MAG 15, Aftershock Vapor 15, ...).
 
-
 # Disclaimer
 **This software is in early stages of developement. Futhermore, to quote GPL: everything is provided as is. There is no warranty for the program, to the extent permitted by applicable law.**
 
@@ -9,7 +8,7 @@ This a Linux kernel platform driver for Intel Whitebook LAPQC71X systems (XMG Fu
 
 # Compatibility
 It has only been tested on an XMG Fusion 15 device (BIOS 0062 up to 0120) and with the `5.4`, `5.8`, and `5.9` kernel series.
-The lightbar control functions on a Tongfang GK7C chassis (XMG Neo 17, PCS Recoil III, Walmart OP17).
+Some functions have been confirmed to work on the Tongfang GK7C chassis (XMG Neo 17, PCS Recoil III, Walmart OP17) (see [#6][issue6]).
 
 # Dependencies
 ### Required
@@ -223,3 +222,6 @@ You can use `acpi_listen` to see what events are generated when you plug the mac
 # Troubleshooting
 
 * The [TUXEDO Control Center](https://github.com/tuxedocomputers/tuxedo-control-center) may interfere with the operation of this kernel module. I do not recommend using both at the same time.
+
+
+[issue6]: https://github.com/pobrn/qc71_laptop/issues/6
