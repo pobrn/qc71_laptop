@@ -85,13 +85,12 @@ extern struct list_head leds_list;
 
 static void emit_keyboard_led_hw_changed(void)
 {
-	struct list_head *node;
+	struct led_classdev *led;
 
 	if (down_read_killable(&leds_list_lock))
 		return;
 
-	list_for_each(node, &leds_list) {
-		struct led_classdev *led = container_of(node, struct led_classdev, node);
+	list_for_each_entry (led, &leds_list, node) {
 		size_t name_length;
 		const char *suffix;
 
