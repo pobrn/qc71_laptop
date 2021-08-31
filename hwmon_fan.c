@@ -85,20 +85,16 @@ static int qc71_hwmon_fan_read(struct device *device, enum hwmon_sensor_types ty
 static int qc71_hwmon_fan_read_string(struct device *dev, enum hwmon_sensor_types type,
 				      u32 attr, int channel, const char **str)
 {
+	static const char * const temp_labels[] = {
+		"fan1_temp",
+		"fan2_temp",
+	};
+
 	switch (type) {
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_label:
-			switch (channel) {
-			case 0:
-				*str = "fan1_temp";
-				break;
-			case 1:
-				*str = "fan2_temp";
-				break;
-			default:
-				return -EOPNOTSUPP;
-			}
+			*str = temp_labels[channel];
 			break;
 		default:
 			return -EOPNOTSUPP;
