@@ -17,7 +17,8 @@ $(MODNAME)-$(CONFIG_ACPI_BATTERY) += battery.o
 $(MODNAME)-$(CONFIG_LEDS_CLASS)   += led_lightbar.o
 $(MODNAME)-$(CONFIG_HWMON)        += hwmon.o hwmon_fan.o hwmon_pwm.o fan.o
 
-KDIR = /lib/modules/$(shell uname -r)/build
+KVER = $(shell uname -r)
+KDIR = /lib/modules/$(KVER)/build
 MDIR = /usr/src/$(MODNAME)-$(MODVER)
 
 all:
