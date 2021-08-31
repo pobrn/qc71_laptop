@@ -1,6 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "pr.h"
 
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0)
+static inline int fixp_linear_interpolate(int x0, int y0, int x1, int y1, int x)
+{
+	if (y0 == y1 || x == x0)
+		return y0;
+	if (x1 == x0 || x == x1)
+		return y1;
+
+	return y0 + ((y1 - y0) * (x - x0) / (x1 - x0));
+}
+#else
+#include <linux/bug.h> /* fixp-arith.h needs it, but doesn't include it */
+#include <linux/fixp-arith.h>
+#endif
+
 #include <linux/lockdep.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
@@ -104,7 +121,6 @@ int qc71_fan_query_abnorm(void)
 	return !!(res & CTRL_1_FAN_ABNORMAL);
 }
 
-
 int qc71_fan_get_pwm(uint8_t fan_index)
 {
 	int err;
@@ -116,7 +132,7 @@ int qc71_fan_get_pwm(uint8_t fan_index)
 	if (err < 0)
 		return err;
 
-	return linear_mapping(0, FAN_MAX_PWM, err, 0, U8_MAX);
+	return fixp_linear_interpolate(0, 0, FAN_MAX_PWM, U8_MAX, err);
 }
 
 int qc71_fan_set_pwm(uint8_t fan_index, uint8_t pwm)
@@ -125,7 +141,9 @@ int qc71_fan_set_pwm(uint8_t fan_index, uint8_t pwm)
 		return -EINVAL;
 
 	return ec_write_byte(qc71_fan_pwm_addrs[fan_index],
-			     linear_mapping(0, U8_MAX, pwm, 0, FAN_MAX_PWM));
+			     fixp_linear_interpolate(0, 0,
+						     U8_MAX, FAN_MAX_PWM,
+						     pwm));
 }
 
 int qc71_fan_get_temp(uint8_t fan_index)
