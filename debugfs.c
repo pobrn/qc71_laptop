@@ -253,7 +253,7 @@ out:
 
 void qc71_debugfs_cleanup(void)
 {
-	/* checks of IS_ERR_OR_NULL() */
+	/* checks if IS_ERR_OR_NULL() */
 	debugfs_remove_recursive(qc71_debugfs_dir);
 }
 
