@@ -27,7 +27,6 @@ void qc71_ec_unlock(void)
 	up_write(&ec_lock);
 }
 
-
 int __must_check qc71_ec_transaction(uint16_t addr, uint16_t data,
 				     union qc71_ec_result *result, bool read)
 {
