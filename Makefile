@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 MODNAME = qc71_laptop
-MODVER = 0.1
+MODVER = 0.0
 
 obj-m += $(MODNAME).o
 
