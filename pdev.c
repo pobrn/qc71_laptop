@@ -218,57 +218,58 @@ static ssize_t super_key_lock_store(struct device *dev, struct device_attribute 
 
 /* ========================================================================== */
 
-enum { DEV_ATTRS_START_LINE = __LINE__ };
 static DEVICE_ATTR_RW(fn_lock);
 static DEVICE_ATTR_RW(fn_lock_switch);
 static DEVICE_ATTR_RW(fan_always_on);
 static DEVICE_ATTR_RW(fan_reduced_duty_cycle);
 static DEVICE_ATTR_RW(manual_control);
 static DEVICE_ATTR_RW(super_key_lock);
-enum { DEV_ATTRS_END_LINE = __LINE__ };
 
-/* -1 is not needed because of the NULL terminator */
-static struct attribute *qc71_laptop_attrs[DEV_ATTRS_END_LINE - DEV_ATTRS_START_LINE];
-ATTRIBUTE_GROUPS(qc71_laptop);
+static struct attribute *qc71_laptop_attrs[] = {
+	&dev_attr_fn_lock.attr,
+	&dev_attr_fn_lock_switch.attr,
+	&dev_attr_fan_always_on.attr,
+	&dev_attr_fan_reduced_duty_cycle.attr,
+	&dev_attr_manual_control.attr,
+	&dev_attr_super_key_lock.attr,
+	NULL
+};
 
 /* ========================================================================== */
 
-static int __init setup_sysfs_attrs(void)
+static umode_t qc71_laptop_attr_is_visible(struct kobject *kobj, struct attribute *attr, int n)
 {
-	size_t idx = 0;
+	bool ok = false;
 
-	qc71_laptop_attrs[idx++] = &dev_attr_manual_control.attr;
+	if (attr == &dev_attr_fn_lock.attr || attr == &dev_attr_fn_lock_switch.attr)
+		ok = qc71_features.fn_lock;
+	else if (attr == &dev_attr_fan_always_on.attr || attr == &dev_attr_fan_reduced_duty_cycle.attr)
+		ok = qc71_features.fan_extras;
+	else if (attr == &dev_attr_manual_control.attr)
+		ok = true;
+	else if (attr == &dev_attr_super_key_lock.attr)
+		ok = qc71_features.super_key_lock;
 
-	if (qc71_features.super_key_lock)
-		qc71_laptop_attrs[idx++] = &dev_attr_super_key_lock.attr;
-
-	if (qc71_features.fn_lock) {
-		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock.attr;
-		qc71_laptop_attrs[idx++] = &dev_attr_fn_lock_switch.attr;
-	}
-
-	if (qc71_features.fan_extras) {
-		qc71_laptop_attrs[idx++] = &dev_attr_fan_reduced_duty_cycle.attr;
-		qc71_laptop_attrs[idx++] = &dev_attr_fan_always_on.attr;
-	}
-
-	qc71_laptop_attrs[idx] = NULL;
-
-	if (WARN(idx >= ARRAY_SIZE(qc71_laptop_attrs), "sysfs attribute array overflow\n"))
-		return -EOVERFLOW;
-
-	return 0;
+	return ok ? attr->mode : 0;
 }
+
+/* ========================================================================== */
+
+static const struct attribute_group qc71_laptop_group = {
+	.is_visible = qc71_laptop_attr_is_visible,
+	.attrs = qc71_laptop_attrs,
+};
+
+static const struct attribute_group *qc71_laptop_groups[] = {
+	&qc71_laptop_group,
+	NULL
+};
 
 /* ========================================================================== */
 
 int __init qc71_pdev_setup(void)
 {
-	int err = 0;
-
-	err = setup_sysfs_attrs();
-	if (err)
-		goto out;
+	int err;
 
 	qc71_platform_dev = platform_device_alloc(KBUILD_MODNAME, PLATFORM_DEVID_NONE);
 	if (!qc71_platform_dev) {
