@@ -20,6 +20,14 @@ struct oem_string_walker_data {
 
 /* ========================================================================== */
 
+static int __init slimbook_dmi_cb(const struct dmi_system_id *id)
+{
+	qc71_features.fn_lock      = true;
+	qc71_features.silent_mode  = true;
+
+	return 1;
+}
+
 static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 	{
 		.matches = {
@@ -32,6 +40,38 @@ static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 		.matches = {
 			DMI_EXACT_MATCH(DMI_CHASSIS_VENDOR, "Avell High Performance"),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "A60 MUV"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX AMD */
+		.callback = slimbook_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "PROX-AMD"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX15 AMD */
+		.callback = slimbook_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "PROX15-AMD"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX AMD5 */
+		.callback = slimbook_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME,"PROX-AMD5"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX15 AMD5 */
+		.callback = slimbook_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME,"PROX15-AMD5"),
 			{ }
 		}
 	},

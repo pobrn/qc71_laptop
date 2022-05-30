@@ -101,6 +101,7 @@
 #define FAN_CTRL_TURBO        BIT(4)
 #define FAN_CTRL_AUTO         BIT(5)
 #define FAN_CTRL_FAN_BOOST    BIT(6)
+#define FAN_CTRL_SILENT_MODE  BIT(7)
 
 #define FAN_RPM_1_ADDR ADDR(0x04, 0x64)
 #define FAN_RPM_2_ADDR ADDR(0x04, 0x6C)
@@ -160,6 +161,7 @@
 #define PROJ_ID_GK5CN_X            6
 #define PROJ_ID_GK7CN_S            7
 #define PROJ_ID_GK7CPCS_GK5CQ7Z    8
+#define PROJ_ID_PF5NU1G_PF4LUXF    9
 #define PROJ_ID_IDP               11
 #define PROJ_ID_ID6Y              12
 #define PROJ_ID_ID7Y              13
