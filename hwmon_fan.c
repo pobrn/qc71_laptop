@@ -119,13 +119,13 @@ static const struct hwmon_channel_info *qc71_hwmon_fan_ch_info[] = {
 	NULL
 };
 
-static struct hwmon_ops qc71_hwmon_fan_ops = {
+static const struct hwmon_ops qc71_hwmon_fan_ops = {
 	.is_visible  = qc71_hwmon_fan_is_visible,
 	.read        = qc71_hwmon_fan_read,
 	.read_string = qc71_hwmon_fan_read_string,
 };
 
-static struct hwmon_chip_info qc71_hwmon_fan_chip_info = {
+static const struct hwmon_chip_info qc71_hwmon_fan_chip_info = {
 	.ops  = &qc71_hwmon_fan_ops,
 	.info =  qc71_hwmon_fan_ch_info,
 };
