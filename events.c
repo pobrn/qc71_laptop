@@ -391,11 +391,12 @@ void qc71_wmi_events_cleanup(void)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(qc71_wmi_event_guids); i++)
+	for (i = 0; i < ARRAY_SIZE(qc71_wmi_event_guids); i++) {
 		if (qc71_wmi_event_guids[i].handler_installed) {
 			wmi_remove_notify_handler(qc71_wmi_event_guids[i].guid);
 			qc71_wmi_event_guids[i].handler_installed = false;
 		}
+	}
 
 	if (qc71_input_dev)
 		input_unregister_device(qc71_input_dev);
