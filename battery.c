@@ -8,6 +8,7 @@
 #include <acpi/battery.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
+#include <linux/version.h>
 
 #include "ec.h"
 #include "features.h"
@@ -72,7 +73,11 @@ static struct attribute *qc71_laptop_batt_attrs[] = {
 };
 ATTRIBUTE_GROUPS(qc71_laptop_batt);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+static int qc71_laptop_batt_add(struct power_supply *battery, struct acpi_battery_hook *hook)
+#else
 static int qc71_laptop_batt_add(struct power_supply *battery)
+#endif
 {
 	if (strcmp(battery->desc->name, "BAT0") != 0)
 		return 0;
@@ -80,7 +85,11 @@ static int qc71_laptop_batt_add(struct power_supply *battery)
 	return device_add_groups(&battery->dev, qc71_laptop_batt_groups);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+static int qc71_laptop_batt_remove(struct power_supply *battery, struct acpi_battery_hook *hook)
+#else
 static int qc71_laptop_batt_remove(struct power_supply *battery)
+#endif
 {
 	if (strcmp(battery->desc->name, "BAT0") != 0)
 		return 0;

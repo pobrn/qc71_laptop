@@ -26,7 +26,7 @@ static const struct qc71_debugfs_attr {
 	{"batt_alert",       BATT_ALERT_ADDR},
 	{"batt_charge_ctrl", BATT_CHARGE_CTRL_ADDR},
 	{"batt_status",      BATT_STATUS_ADDR},
-	{"battt_temp",       BATT_TEMP_ADDR},
+	{"batt_temp",        BATT_TEMP_ADDR},
 	{"bios_ctrl_1",      BIOS_CTRL_1_ADDR},
 	{"bios_ctrl_2",      BIOS_CTRL_2_ADDR},
 	{"bios_ctrl_3",      BIOS_CTRL_3_ADDR},
