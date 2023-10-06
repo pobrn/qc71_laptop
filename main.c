@@ -108,6 +108,7 @@ static int __init qc71_laptop_module_init(void)
 	if (qc71_features.batt_charge_limit) pr_cont(" charge-limit");
 	if (qc71_features.fan_extras)        pr_cont(" fan-extras");
 	if (qc71_features.silent_mode)       pr_cont(" silent-mode");
+	if (qc71_features.turbo_mode)        pr_cont(" turbo-mode");
 
 	pr_cont("\n");
 

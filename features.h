@@ -13,6 +13,7 @@ struct qc71_features_struct {
 	bool batt_charge_limit : 1;
 	bool fan_extras        : 1; /* duty cycle reduction, always on mode */
 	bool silent_mode       : 1; /* Slimbook silent mode: decreases fan rpm limit and tdp */
+	bool turbo_mode        : 1;
 };
 
 /* ========================================================================== */

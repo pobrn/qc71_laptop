@@ -259,6 +259,13 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 		toggle_fn_lock_from_event_handler();
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "fn_lock");
 		break;
+	/* perf mode button pressed */
+	case 188:
+		pr_info("change perf mode\n");
+		/* TODO: should it be handled here? */
+		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "silent_mode");
+		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "turbo_mode");
+		break;
 
 	/* keyboard backlight brightness changed */
 	case 240:
