@@ -437,7 +437,15 @@ static umode_t qc71_laptop_attr_is_visible(struct kobject *kobj, struct attribut
 		ok = qc71_features.silent_mode;
 	else if (attr == &dev_attr_turbo_mode.attr)
 		ok = qc71_features.turbo_mode;
-		
+	else if (attr == &dev_attr_kbd_backlight_rgb_max.attr)
+		ok = qc71_features.kbd_backlight_rgb;
+	else if (attr == &dev_attr_kbd_backlight_rgb_red.attr)
+		ok = qc71_features.kbd_backlight_rgb;
+	else if (attr == &dev_attr_kbd_backlight_rgb_green.attr)
+		ok = qc71_features.kbd_backlight_rgb;
+	else if (attr == &dev_attr_kbd_backlight_rgb_blue.attr)
+		ok = qc71_features.kbd_backlight_rgb;
+
 	return ok ? attr->mode : 0;
 }
 

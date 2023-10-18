@@ -126,7 +126,7 @@ static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 	{
 		.callback = slimbook_hero_dmi_cb,
 		.matches = {
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Hero"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "HERO-RPL-RTX"),
 			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
 			{ }
 		}
