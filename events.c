@@ -270,8 +270,10 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 		toggle_fn_lock_from_event_handler();
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "fn_lock");
 		break;
+
 	/* perf mode button pressed */
-	case 188:
+	case 0xbc:
+		do_report = false;
 		pr_info("change perf mode\n");
 		/* TODO: should it be handled here? */
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "silent_mode");
