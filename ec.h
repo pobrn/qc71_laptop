@@ -224,6 +224,15 @@
 
 /* ========================================================================== */
 
+#define KBD_BACKLIGHT_RGB_MAX_ADDR   ADDR(0x18, 0x01)
+#define KBD_BACKLIGHT_RGB_WHITE_ADDR ADDR(0x18, 0x02)
+#define KBD_BACKLIGHT_RGB_RED_ADDR   ADDR(0x18, 0x03)
+#define KBD_BACKLIGHT_RGB_GREEN_ADDR ADDR(0x18, 0x05)
+#define KBD_BACKLIGHT_RGB_BLUE_ADDR  ADDR(0x18, 0x08)
+
+/* ========================================================================== */
+
+
 union qc71_ec_result {
 	uint32_t dword;
 	struct {
