@@ -43,6 +43,7 @@
 #define BIOS_CTRL_2_OFFICE_MODE_FAN_TABLE_TYPE BIT(2)
 #define BIOS_CTRL_2_FAN_V3                     BIT(3)
 #define BIOS_CTRL_2_DEFAULT_MODE               BIT(4)
+#define BIOS_CTRL_2_KBD_BACKLIGHT_MODE         BIT(5)
 
 /* 3rd control register of a different kind */
 #define BIOS_CTRL_3_ADDR                   ADDR(0x7, 0xA3)

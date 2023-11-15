@@ -109,6 +109,7 @@ static int __init qc71_laptop_module_init(void)
 	if (qc71_features.fan_extras)        pr_cont(" fan-extras");
 	if (qc71_features.silent_mode)       pr_cont(" silent-mode");
 	if (qc71_features.turbo_mode)        pr_cont(" turbo-mode");
+	if (qc71_features.kbd_backlight_rgb) pr_cont(" kbd-backlight-rgb");
 
 	pr_cont("\n");
 
@@ -123,6 +124,21 @@ static int __init qc71_laptop_module_init(void)
 		} else {
 			sm->initialized = true;
 		}
+	}
+	
+	if (qc71_features.kbd_backlight_rgb) {
+		int status;
+		
+		status = ec_read_byte(BIOS_CTRL_2_ADDR);
+		if (status < 0)
+			goto out;
+		
+		status = status & BIOS_CTRL_2_KBD_BACKLIGHT_MODE;
+		status = ec_write_byte(BIOS_CTRL_2_ADDR, status);
+		
+		if (status < 0)
+			goto out;
+		
 	}
 
 	err = 0;
