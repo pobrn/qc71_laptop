@@ -43,6 +43,7 @@
 #define BIOS_CTRL_2_OFFICE_MODE_FAN_TABLE_TYPE BIT(2)
 #define BIOS_CTRL_2_FAN_V3                     BIT(3)
 #define BIOS_CTRL_2_DEFAULT_MODE               BIT(4)
+#define BIOS_CTRL_2_KBD_RGB_MANUAL             BIT(6)
 
 /* 3rd control register of a different kind */
 #define BIOS_CTRL_3_ADDR                   ADDR(0x7, 0xA3)
@@ -68,6 +69,7 @@
 #define CTRL_2_TURBO_LEVEL_2               BIT(3)
 #define CTRL_2_TURBO_LEVEL_3               (BIT(2) | BIT(3))
 // #define CTRL_2_SINGLE_COLOR_KBD_?         BIT(4)
+#define CTRL_2_COLOR_KBD_TRIGGER           BIT(4)
 #define CTRL_2_SINGLE_COLOR_KBD_BRIGHTNESS GENMASK(7, 5)
 
 #define CTRL_3_ADDR         ADDR(0x07, 0xA5)
