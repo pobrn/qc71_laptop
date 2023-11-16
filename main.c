@@ -128,13 +128,8 @@ static int __init qc71_laptop_module_init(void)
 	
 	if (qc71_features.kbd_backlight_rgb) {
 		int status;
-		
-		status = ec_read_byte(BIOS_CTRL_2_ADDR);
-		if (status < 0)
-			goto out;
-		
-		status = status & BIOS_CTRL_2_KBD_BACKLIGHT_MODE;
-		status = ec_write_byte(BIOS_CTRL_2_ADDR, status);
+		// needed by HERO keyboard backlight
+		status = ec_write_byte(CTRL_2_ADDR, 0x10);
 		
 		if (status < 0)
 			goto out;
