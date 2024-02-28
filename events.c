@@ -12,6 +12,7 @@
 #include "misc.h"
 #include "pdev.h"
 #include "wmi.h"
+#include "features.h"
 
 /* ========================================================================== */
 
@@ -53,9 +54,11 @@ static const struct key_entry qc71_wmi_hotkeys[] = {
 	 * handled automatically when it automatic mode
 	 */
 	{ KE_KEY,    0xa4, { KEY_RFKILL }},
+	{ KE_KEY,    0xa5, { KEY_FN_F2 }},
 	{ KE_KEY,    0xb1, { KEY_KBDILLUMDOWN }},
 	{ KE_KEY,    0xb2, { KEY_KBDILLUMUP }},
 	{ KE_KEY,    0xb8, { KEY_FN_ESC }},
+	{ KE_KEY,    0xbc, { KEY_FN_F5 }},
 
 	{ KE_END }
 
@@ -223,7 +226,7 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 
 	/* super key (win key) lock state changed */
 	case 0xa5:
-		do_report = false;
+		//do_report = false;
 		pr_debug("super key lock state changed\n");
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "super_key_lock");
 		break;
@@ -274,10 +277,17 @@ static void qc71_wmi_event_d2_handler(union acpi_object *obj)
 	/* perf mode button pressed */
 	case 0xbc:
 		do_report = false;
-		pr_info("change perf mode\n");
-		/* TODO: should it be handled here? */
+		pr_info("change perfomance mode\n");
+		
+		if (qc71_model == SLB_MODEL_EXECUTIVE) {
+			do_report = true;
+		}
+
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "silent_mode");
-		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "turbo_mode");
+
+		if (qc71_model == SLB_MODEL_HERO || qc71_model == SLB_MODEL_TITAN) {
+			sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "turbo_mode");
+		}
 		break;
 
 	/* keyboard backlight brightness changed */
