@@ -20,6 +20,43 @@ struct oem_string_walker_data {
 
 /* ========================================================================== */
 
+static int __init slimbook_prox_dmi_cb(const struct dmi_system_id *id)
+{
+	qc71_features.fn_lock      = true;
+	qc71_features.silent_mode  = true;
+	qc71_model = SLB_MODEL_PROX;
+
+	return 1;
+}
+
+static int __init slimbook_executive_dmi_cb(const struct dmi_system_id *id)
+{
+	qc71_features.fn_lock      = true;
+	qc71_features.silent_mode  = true;
+	qc71_model = SLB_MODEL_EXECUTIVE;
+
+	return 1;
+}
+
+static int __init slimbook_titan_dmi_cb(const struct dmi_system_id *id)
+{
+	qc71_features.silent_mode  = true;
+	qc71_features.turbo_mode   = true;
+	qc71_model = SLB_MODEL_TITAN;
+
+	return 1;
+}
+
+static int __init slimbook_hero_dmi_cb(const struct dmi_system_id *id)
+{
+	qc71_features.silent_mode       = true;
+	qc71_features.turbo_mode        = true;
+	qc71_features.kbd_backlight_rgb = true;
+	qc71_model = SLB_MODEL_HERO;
+
+	return 1;
+}
+
 static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 	{
 		.matches = {
@@ -35,12 +72,85 @@ static const struct dmi_system_id qc71_dmi_table[] __initconst = {
 			{ }
 		}
 	},
+	{
+		/* Slimbook PROX AMD */
+		.callback = slimbook_prox_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "PROX-AMD"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"), 
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX15 AMD */
+		.callback = slimbook_prox_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "PROX15-AMD"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX AMD5 */
+		.callback = slimbook_prox_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME,"PROX-AMD5"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook PROX15 AMD5 */
+		.callback = slimbook_prox_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME,"PROX15-AMD5"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook TITAN AMD5 */
+		.callback = slimbook_titan_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME,"TITAN"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
+	{
+		/* Executive 12th */
+		.callback = slimbook_executive_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Executive"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
+	{
+		/* Executive-14 11th */
+		.callback = slimbook_executive_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "EXECUTIVE-14"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
+	{
+		/* Slimbook Hero Raptor Lake with Nvidia RTX */
+		.callback = slimbook_hero_dmi_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "HERO-RPL-RTX"),
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "SLIMBOOK"),
+			{ }
+		}
+	},
 	{ }
 };
 
 /* ========================================================================== */
 
 struct qc71_features_struct qc71_features;
+uint32_t qc71_model;
 
 /* ========================================================================== */
 

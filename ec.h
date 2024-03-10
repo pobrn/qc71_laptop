@@ -43,6 +43,7 @@
 #define BIOS_CTRL_2_OFFICE_MODE_FAN_TABLE_TYPE BIT(2)
 #define BIOS_CTRL_2_FAN_V3                     BIT(3)
 #define BIOS_CTRL_2_DEFAULT_MODE               BIT(4)
+#define BIOS_CTRL_2_KBD_RGB_MANUAL             BIT(6)
 
 /* 3rd control register of a different kind */
 #define BIOS_CTRL_3_ADDR                   ADDR(0x7, 0xA3)
@@ -68,6 +69,7 @@
 #define CTRL_2_TURBO_LEVEL_2               BIT(3)
 #define CTRL_2_TURBO_LEVEL_3               (BIT(2) | BIT(3))
 // #define CTRL_2_SINGLE_COLOR_KBD_?         BIT(4)
+#define CTRL_2_COLOR_KBD_TRIGGER           BIT(4)
 #define CTRL_2_SINGLE_COLOR_KBD_BRIGHTNESS GENMASK(7, 5)
 
 #define CTRL_3_ADDR         ADDR(0x07, 0xA5)
@@ -101,6 +103,7 @@
 #define FAN_CTRL_TURBO        BIT(4)
 #define FAN_CTRL_AUTO         BIT(5)
 #define FAN_CTRL_FAN_BOOST    BIT(6)
+#define FAN_CTRL_SILENT_MODE  BIT(7)
 
 #define FAN_RPM_1_ADDR ADDR(0x04, 0x64)
 #define FAN_RPM_2_ADDR ADDR(0x04, 0x6C)
@@ -160,6 +163,7 @@
 #define PROJ_ID_GK5CN_X            6
 #define PROJ_ID_GK7CN_S            7
 #define PROJ_ID_GK7CPCS_GK5CQ7Z    8
+#define PROJ_ID_PF5NU1G_PF4LUXF    9
 #define PROJ_ID_IDP               11
 #define PROJ_ID_ID6Y              12
 #define PROJ_ID_ID7Y              13
@@ -221,6 +225,15 @@
 #define PL4_ADDR ADDR(0x07, 0x85)
 
 /* ========================================================================== */
+
+#define KBD_BACKLIGHT_RGB_MAX_ADDR   ADDR(0x18, 0x01)
+#define KBD_BACKLIGHT_RGB_WHITE_ADDR ADDR(0x18, 0x02)
+#define KBD_BACKLIGHT_RGB_RED_ADDR   ADDR(0x18, 0x03)
+#define KBD_BACKLIGHT_RGB_GREEN_ADDR ADDR(0x18, 0x05)
+#define KBD_BACKLIGHT_RGB_BLUE_ADDR  ADDR(0x18, 0x08)
+
+/* ========================================================================== */
+
 
 union qc71_ec_result {
 	uint32_t dword;

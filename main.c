@@ -107,6 +107,10 @@ static int __init qc71_laptop_module_init(void)
 	if (qc71_features.fn_lock)           pr_cont(" fn-lock");
 	if (qc71_features.batt_charge_limit) pr_cont(" charge-limit");
 	if (qc71_features.fan_extras)        pr_cont(" fan-extras");
+	if (qc71_features.silent_mode)       pr_cont(" silent-mode");
+	if (qc71_features.turbo_mode)        pr_cont(" turbo-mode");
+	if (qc71_features.kbd_backlight_rgb) pr_cont(" kbd-backlight-rgb");
+
 	pr_cont("\n");
 
 	for (i = 0; i < ARRAY_SIZE(qc71_submodules); i++) {
@@ -120,6 +124,27 @@ static int __init qc71_laptop_module_init(void)
 		} else {
 			sm->initialized = true;
 		}
+	}
+	
+	if (qc71_features.kbd_backlight_rgb) {
+		int status;
+		// needed by HERO keyboard backlight
+		status = ec_read_byte(BIOS_CTRL_2_ADDR);
+		if (status < 0)
+			goto out;
+		
+		status = ec_write_byte(BIOS_CTRL_2_ADDR, status | BIOS_CTRL_2_KBD_RGB_MANUAL);
+		if (status < 0)
+			goto out;
+		
+		status = ec_read_byte(CTRL_2_ADDR);
+		if (status < 0)
+			goto out;
+		
+		status = ec_write_byte(CTRL_2_ADDR, (status & 0x0f) | CTRL_2_COLOR_KBD_TRIGGER);
+		if (status < 0)
+			goto out;
+		
 	}
 
 	err = 0;
