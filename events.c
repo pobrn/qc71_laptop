@@ -120,7 +120,7 @@ static void emit_keyboard_led_hw_changed(void)
 	up_read(&leds_list_lock);
 }
 #else
-static inline emit_keyboard_led_hw_changed(void)
+static inline void emit_keyboard_led_hw_changed(void)
 { }
 #endif
 
