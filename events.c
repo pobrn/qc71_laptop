@@ -14,6 +14,8 @@
 #include "misc.h"
 #include "pdev.h"
 #include "wmi.h"
+#include "features.h"
+#include "ec.h"
 
 /* ========================================================================== */
 
@@ -55,10 +57,14 @@ static const struct key_entry qc71_wmi_hotkeys[] = {
 	 * handled automatically when it automatic mode
 	 */
 	{ KE_KEY,    0xa4, { KEY_RFKILL }},
+	{ KE_KEY,    0xa5, { KEY_FN_F2 }},
+	{ KE_KEY,    0xb0, { KEY_FN_F5 }},
 	{ KE_KEY,    0xb1, { KEY_KBDILLUMDOWN }},
 	{ KE_KEY,    0xb2, { KEY_KBDILLUMUP }},
+	{ KE_KEY,    0xb3, { KEY_KBDILLUMTOGGLE }},
 	{ KE_KEY,    0xb8, { KEY_FN_ESC }},
-
+	{ KE_KEY,    0xbc, { KEY_FN_F5 }},
+	{ KE_KEY,    0xcf, { KEY_FN_F12 }},
 	{ KE_END }
 };
 
@@ -124,6 +130,47 @@ static inline void emit_keyboard_led_hw_changed(void)
 { }
 #endif
 
+static void change_performance(void)
+{
+	int status, performance_bits, current_value, next_value;
+	char profile[32];
+
+	status = ec_read_byte(FAN_CTRL_ADDR);
+
+	if (status<0)
+		return;
+
+	pr_debug("current profile:%x\n",status);
+
+	performance_bits = FAN_CTRL_SILENT_MODE | FAN_CTRL_TURBO;
+	current_value = status & performance_bits;
+	next_value = status & ~performance_bits;
+
+	switch (current_value) {
+		case 0:
+			next_value = next_value | FAN_CTRL_AUTO | FAN_CTRL_TURBO;
+			sprintf(profile,"perfomance");
+			break;
+
+		case FAN_CTRL_SILENT_MODE:
+			next_value = next_value | FAN_CTRL_AUTO;
+			sprintf(profile,"balanced");
+			break;
+
+		case FAN_CTRL_TURBO:
+			next_value = next_value | FAN_CTRL_AUTO | FAN_CTRL_SILENT_MODE;
+			sprintf(profile,"energy-saver");
+			break;
+
+		default:
+			next_value = next_value | FAN_CTRL_AUTO;
+			sprintf(profile,"balanced");
+	}
+
+	pr_info("Setting profile to: %s\n",profile);
+	ec_write_byte(FAN_CTRL_ADDR, next_value);
+}
+
 static void process_event_72(const union acpi_object *obj)
 {
 	bool do_report = true;
@@ -133,140 +180,197 @@ static void process_event_72(const union acpi_object *obj)
 
 	switch (obj->integer.value) {
 	/* caps lock */
-	case 1:
-		pr_info("caps lock\n");
+	case 0x01:
+		pr_debug("caps lock\n");
 		break;
 
 	/* num lock */
-	case 2:
-		pr_info("num lock\n");
+	case 0x02:
+		pr_debug("num lock\n");
 		break;
 
 	/* scroll lock */
-	case 3:
-		pr_info("scroll lock\n");
+	case 0x03:
+		pr_debug("scroll lock\n");
 		break;
 
 	/* touchpad on */
-	case 4:
-		pr_info("touchpad on\n");
+	case 0x04:
+		do_report = false;
+		pr_debug("touchpad on\n");
 		break;
 
 	/* touchpad off */
-	case 5:
-		pr_info("touchpad off\n");
+	case 0x05:
+		do_report = false;
+		pr_debug("touchpad off\n");
 		break;
 
 	/* increase screen brightness */
-	case 20:
-		pr_info("increase screen brightness\n");
+	case 0x14:
+		pr_debug("increase screen brightness\n");
 		/* do_report = !acpi_video_handles_brightness_key_presses() */
 		break;
 
 	/* decrease screen brightness */
-	case 21:
-		pr_info("decrease screen brightness\n");
+	case 0x15:
+		pr_debug("decrease screen brightness\n");
 		/* do_report = !acpi_video_handles_brightness_key_presses() */
 		break;
 
 	/* radio on */
-	case 26:
+	case 0x1a:
 		/* triggered in automatic mode when the rfkill hotkey is pressed */
-		pr_info("radio on\n");
+		pr_debug("radio on\n");
 		break;
 
 	/* radio off */
-	case 27:
+	case 0x1b:
 		/* triggered in automatic mode when the rfkill hotkey is pressed */
-		pr_info("radio off\n");
+		pr_debug("radio off\n");
 		break;
 
 	/* mute/unmute */
-	case 53:
-		pr_info("toggle mute\n");
+	case 0x35:
+		pr_debug("toggle mute\n");
 		break;
 
 	/* decrease volume */
-	case 54:
-		pr_info("decrease volume\n");
+	case 0x36:
+		pr_debug("decrease volume\n");
 		break;
 
 	/* increase volume */
-	case 55:
-		pr_info("increase volume\n");
+	case 0x37:
+		pr_debug("increase volume\n");
 		break;
 
-	case 57:
-		pr_info("lightbar on\n");
+	case 0x39:
+		do_report = false;
+		pr_debug("lightbar on\n");
 		break;
 
-	case 58:
-		pr_info("lightbar off\n");
+	case 0x3a:
+		do_report = false;
+		pr_debug("lightbar off\n");
+		break;
+
+	case 0x3b:
+		do_report = false;
+		pr_debug("backlight off\n");
+		break;
+
+	case 0x3d:
+		do_report = false;
+		pr_debug("backlight half\n");
+		break;
+
+	case 0x3f:
+		do_report = false;
+		pr_debug("backlight full\n");
 		break;
 
 	/* enable super key (win key) lock */
-	case 64:
-		pr_info("enable super key lock\n");
+	case 0x40:
+		do_report = false;
+		pr_debug("enable super key lock\n");
 		break;
 
 	/* decrease volume */
-	case 65:
-		pr_info("disable super key lock\n");
+	case 0x41:
+		do_report = false;
+		pr_debug("disable super key lock\n");
 		break;
 
 	/* enable/disable airplane mode */
-	case 164:
-		pr_info("toggle airplane mode\n");
+	case 0xa4:
+		pr_debug("toggle airplane mode\n");
 		break;
 
 	/* super key (win key) lock state changed */
-	case 165:
-		pr_info("super key lock state changed\n");
+	case 0xa5:
+		//do_report = false;
+		pr_debug("super key lock state changed\n");
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "super_key_lock");
 		break;
 
-	case 166:
-		pr_info("lightbar state changed\n");
+	case 0xa6:
+		do_report = false;
+		pr_debug("lightbar state changed\n");
 		break;
 
 	/* fan boost state changed */
-	case 167:
+	case 0xa7:
+		do_report = false;
 		pr_info("fan boost state changed\n");
 		break;
 
 	/* charger unplugged/plugged in */
-	case 171:
+	case 0xab:
+		do_report = false;
 		pr_info("AC plugged/unplugged\n");
 		break;
 
 	/* perf mode button pressed */
-	case 176:
+	case 0xb0:
+		do_report = false;
 		pr_info("change perf mode\n");
-		/* TODO: should it be handled here? */
+
+		if (qc71_model == SLB_MODEL_EVO ||
+			qc71_model == SLB_MODEL_CREATIVE) {
+			do_report = true;
+			change_performance();
+		}
 		break;
 
 	/* increase keyboard backlight */
-	case 177:
-		pr_info("keyboard backlight decrease\n");
+	case 0xb1:
+		pr_debug("keyboard backlight decrease\n");
 		/* TODO: should it be handled here? */
 		break;
 
 	/* decrease keyboard backlight */
-	case 178:
-		pr_info("keyboard backlight increase\n");
+	case 0xb2:
+		pr_debug("keyboard backlight increase\n");
 		/* TODO: should it be handled here? */
 		break;
 
+	/* keyboard backlight cycle */
+	case 0xb3:
+		break;
+
 	/* toggle Fn lock (Fn+ESC)*/
-	case 184:
-		pr_info("toggle Fn lock\n");
+	case 0xb8:
+		pr_debug("toggle Fn lock\n");
 		toggle_fn_lock_from_event_handler();
 		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "fn_lock");
 		break;
 
+	/* perf mode button pressed */
+	case 0xbc:
+		do_report = false;
+		pr_info("change perfomance mode\n");
+		
+		if (qc71_model == SLB_MODEL_EXECUTIVE) {
+			do_report = true;
+		}
+
+		sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "silent_mode");
+
+		if (qc71_model == SLB_MODEL_HERO || qc71_model == SLB_MODEL_TITAN) {
+			sysfs_notify(&qc71_platform_dev->dev.kobj, NULL, "turbo_mode");
+		}
+		break;
+
+	/* webcam toggle on/off */
+	case 0xcf:
+
+		break;
+
 	/* keyboard backlight brightness changed */
-	case 240:
-		pr_info("keyboard backlight changed\n");
+	case 0xf0:
+		do_report = false;
+		pr_debug("keyboard backlight changed\n");
 		emit_keyboard_led_hw_changed();
 		break;
 
@@ -283,18 +387,18 @@ static void process_event_72(const union acpi_object *obj)
 
 static void process_event(const union acpi_object *obj, const char *guid)
 {
-	pr_info("guid=%s obj=%p\n", guid, obj);
+	pr_debug("guid=%s obj=%p\n", guid, obj);
 
 	if (!obj)
 		return;
 
-	pr_info("obj->type = %d\n", (int) obj->type);
+	pr_debug("obj->type = %d\n", (int) obj->type);
 	if (obj->type == ACPI_TYPE_INTEGER) {
-		pr_info("int = %u\n", (unsigned int) obj->integer.value);
+		pr_debug("int = %u\n", (unsigned int) obj->integer.value);
 	} else if (obj->type == ACPI_TYPE_STRING) {
-		pr_info("string = '%s'\n", obj->string.pointer);
+		pr_debug("string = '%s'\n", obj->string.pointer);
 	} else if (obj->type == ACPI_TYPE_BUFFER) {
-		pr_info("buffer = %u %*ph", obj->buffer.length,
+		pr_debug("buffer = %u %*ph", obj->buffer.length,
 			(int) obj->buffer.length, (void *) obj->buffer.pointer);
 	}
 

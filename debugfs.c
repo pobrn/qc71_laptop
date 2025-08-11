@@ -90,6 +90,11 @@ static const struct qc71_debugfs_attr {
 
 	{"trigger_1",        TRIGGER_1_ADDR},
 	{"trigger_2",        TRIGGER_2_ADDR},
+	{"backlight_rgb_max",    KBD_BACKLIGHT_RGB_MAX_ADDR},
+	{"backlight_rgb_white",  KBD_BACKLIGHT_RGB_WHITE_ADDR},
+	{"backlight_rgb_red",    KBD_BACKLIGHT_RGB_RED_ADDR},
+	{"backlight_rgb_green",  KBD_BACKLIGHT_RGB_GREEN_ADDR},
+	{"backlight_rgb_blue",   KBD_BACKLIGHT_RGB_BLUE_ADDR}
 };
 
 /* ========================================================================== */
